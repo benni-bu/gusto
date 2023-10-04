@@ -88,11 +88,13 @@ class OutputParameters(Configuration):
     dumplist = None
     dumplist_latlon = []
     dump_diagnostics = True
-    checkpoint = True
+    diagfreq = 1
+    checkpoint = False
     checkpoint_method = 'checkpointfile'
     checkpoint_pickup_filename = None
     chkptfreq = 1
     dirname = None
+    log_courant = True
     #: TODO: Should the output fields be interpolated or projected to
     #: a linear space?  Default is interpolation.
     project_fields = False
