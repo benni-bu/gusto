@@ -5,7 +5,7 @@ solved with a discretisation of the linear shallow-water equations.
 
 from gusto import *
 from firedrake import (PeriodicRectangleMesh, SpatialCoordinate,
-                       as_vector, pi, sqrt, min_value)
+                       as_vector, sin, cos, pi, sqrt, min_value)
 import sys
 
 # ---------------------------------------------------------------------------- #
@@ -19,8 +19,8 @@ if '--running-tests' in sys.argv:
     ndumps = 1
 else:
     # setup resolution and timestepping parameters
-    ref_dt = {4: 1500.}
-    tmax = 10*day
+    ref_dt = {1: 1500.}
+    tmax = 1*day
     ndumps = 5
 
 #setup domain parameters
@@ -30,7 +30,7 @@ deltax = 2.5e5
 deltay = deltax
 
 # setup shallow water parameters
-R = 6371220.
+R = 6371220. #Earth's radius only defined for the purpose of calculating Coriolis parameter
 H = 5960.
 
 # setup input that doesn't change with ref level or dt
@@ -43,34 +43,36 @@ for ref_level, dt in ref_dt.items():
     # ------------------------------------------------------------------------ #
 
     # Domain
-    ncolumnsx = int(Lx/deltax)
-    ncolumnsy = int(Ly/deltay)  
+    ncolumnsx = int(ref_level*Lx/deltax)
+    ncolumnsy = int(ref_level*Ly/deltay)  
     mesh = PeriodicRectangleMesh(ncolumnsx, ncolumnsy, Lx, Ly, "x", quadrilateral=True)
     x = SpatialCoordinate(mesh)
-    domain = Domain(mesh, dt, 'BDM', 1)
+    domain = Domain(mesh, dt, 'RTCF', 1)
 
     # Equation
     Omega = parameters.Omega
-    fexpr = 2*Omega*x[2]/R
-    theta, lamda = latlon_coords(mesh)
-    R0 = pi/9.
+    #see Ullrich&Jablonowski 2012 for reference on beta-plane expression
+    beta_0 = 2/R*(Omega*cos(pi/4))
+    f_0 = 2*Omega*sin(pi/4)
+    fexpr = f_0 + beta_0*(x[1]-Ly/2)
+    R0 = 1e6 
     R0sq = R0**2
-    lamda_c = -pi/2.
-    lsq = (lamda - lamda_c)**2
-    theta_c = pi/6.
-    thsq = (theta - theta_c)**2
-    rsq = min_value(R0sq, lsq+thsq)
+    y_c = 3e6 #place mountain in the centre of the channel
+    ysq = (x[1] - y_c)**2
+    x_c = 5e6
+    xsq = (x[0] - x_c)**2
+    rsq = min_value(R0sq, ysq+xsq)
     r = sqrt(rsq)
     bexpr = 2000 * (1 - r/R0)
     eqns = LinearShallowWaterEquations(domain, parameters, fexpr=fexpr, bexpr=bexpr,
                                        no_normal_flow_bc_ids=[1, 2])
 
     # I/O
-    dirname = "williamson_5_ref%s_dt%s" % (ref_level, dt)
+    dirname = "linear_w5_channel_ref%s_dt%s" % (ref_level, dt)
     dumpfreq = int(tmax / (ndumps*dt))
     output = OutputParameters(
         dirname=dirname,
-        dumplist_latlon=['D'],
+        dumplist=['D', 'u'],
         dumpfreq=dumpfreq,
     )
     diagnostic_fields = [Sum('D', 'topography')]
@@ -90,10 +92,9 @@ for ref_level, dt in ref_dt.items():
     u0 = stepper.fields('u')
     D0 = stepper.fields('D')
     u_max = 20.   # Maximum amplitude of the zonal wind (m/s)
-    uexpr = as_vector([-u_max*x[1]/R, u_max*x[0]/R, 0.0])
+    uexpr = as_vector([u_max, 0.0])
     g = parameters.g
-    Rsq = R**2
-    Dexpr = H - ((R * Omega * u_max + 0.5*u_max**2)*x[2]**2/Rsq)/g - bexpr
+    Dexpr = H - u_max/g*((f_0-beta_0*Ly/2)*x[1] + beta_0/2*x[1]**2) - bexpr
 
     u0.project(uexpr)
     D0.interpolate(Dexpr)

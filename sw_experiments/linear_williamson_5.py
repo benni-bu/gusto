@@ -22,7 +22,7 @@ if '--running-tests' in sys.argv:
 else:
     # setup resolution and timestepping parameters
     ref_dt = {4: 1500.}
-    tmax = 10*day
+    tmax = 1*day
     ndumps = 5
 
 # setup shallow water parameters
@@ -42,12 +42,12 @@ for ref_level, dt in ref_dt.items():
     mesh = CubedSphereMesh(radius=R,
                                  refinement_level=ref_level, degree=2)
     x = SpatialCoordinate(mesh)
-    domain = Domain(mesh, dt, 'BDM', 1)
+    domain = Domain(mesh, dt, 'RTCF', 1)
 
     # Equation
     Omega = parameters.Omega
     fexpr = 2*Omega*x[2]/R
-    theta, lamda = latlon_coords(mesh)
+    lamda, theta, _ = lonlatr_from_xyz(x[0], x[1], x[2])
     R0 = pi/9.
     R0sq = R0**2
     lamda_c = -pi/2.
