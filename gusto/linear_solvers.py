@@ -23,7 +23,7 @@ from gusto.recovery.recovery_kernels import AverageWeightings, AverageKernel
 from abc import ABCMeta, abstractmethod, abstractproperty
 
 
-__all__ = ["IncompressibleSolver", "LinearTimesteppingSolver", "CompressibleSolver"]
+__all__ = ["IncompressibleSolver", "LinearTimesteppingSolver", "CompressibleSolver", "MLLinearSolver"]
 
 
 class TimesteppingSolver(object, metaclass=ABCMeta):
@@ -557,7 +557,88 @@ class LinearTimesteppingSolver(object):
         'mat_type': 'matfree',
         'pc_type': 'python',
         'pc_python_type': 'firedrake.HybridizationPC',
-        'hybridization': {'ksp_type': 'cg',
+        'hybridization': {'ksp_type': 'cg',  #hybridization: this might just be where firedrake options merge with Petsc options
+                          'pc_type': 'gamg',
+                          'ksp_rtol': 1e-8,
+                          'mg_levels': {'ksp_type': 'chebyshev',
+                                        'ksp_max_it': 2,
+                                        'pc_type': 'bjacobi',
+                                        'sub_pc_type': 'ilu'}}
+    }
+
+    def __init__(self, equation, alpha):
+        """
+        Args:
+            equation (:class:`PrognosticEquation`): the model's equation object.
+            alpha (float): the semi-implicit off-centring factor. A value of 1
+                is fully-implicit.
+        """
+        residual = equation.residual.label_map(
+            lambda t: t.has_label(linearisation),
+            lambda t: Term(t.get(linearisation).form, t.labels),
+            drop)
+
+        dt = equation.domain.dt
+        W = equation.function_space
+        beta = dt*alpha
+
+        # Split up the rhs vector (symbolically)
+        self.xrhs = Function(W)
+
+        aeqn = residual.label_map(
+            lambda t: (t.has_label(time_derivative) and t.has_label(linearisation)),
+            map_if_false=lambda t: beta*t)
+        Leqn = residual.label_map(
+            lambda t: (t.has_label(time_derivative) and t.has_label(linearisation)),
+            map_if_false=drop)
+
+        # Place to put result of solver
+        self.dy = Function(W)
+
+        # Solver
+        bcs = [DirichletBC(W.sub(0), bc.function_arg, bc.sub_domain) for bc in equation.bcs['u']]
+        problem = LinearVariationalProblem(aeqn.form,
+                                           action(Leqn.form, self.xrhs),
+                                           self.dy, bcs=bcs)
+
+        self.solver = LinearVariationalSolver(problem,
+                                              solver_parameters=self.solver_parameters,
+                                              options_prefix='linear_solver')
+
+    @timed_function("Gusto:LinearSolve")
+    def solve(self, xrhs, dy):
+        """
+        Solve the linear problem.
+
+        Args:
+            xrhs (:class:`Function`): the right-hand side field in the
+                appropriate :class:`MixedFunctionSpace`.
+            dy (:class:`Function`): the resulting field in the appropriate
+                :class:`MixedFunctionSpace`.
+        """
+        self.xrhs.assign(xrhs)
+        self.solver.solve()
+        dy.assign(self.dy)
+
+
+
+class MLLinearSolver(object):
+    """
+    Linear solver object for (hopefully soon) implementing ML-preconditioned linear 
+    solvers for the shallow-water equations.
+
+    This linear solver object is general and is designed for use with different
+    equation sets, including with the non-linear shallow-water equations. It
+    forms the linear problem from the equations using FML. The linear system is
+    solved using a hybridised-mixed method.
+    """
+
+    solver_parameters = {
+        'ksp_type': 'preonly',
+        'mat_type': 'matfree',
+        'pc_type': 'python',
+        'pc_python_type': 'firedrake.HybridizationPC',
+        'hybridization': {'ksp_type': 'gmres',  #hybridization: this might just be where firedrake options merge with Petsc options
                           'pc_type': 'gamg',
                           'ksp_rtol': 1e-8,
                           'mg_levels': {'ksp_type': 'chebyshev',
