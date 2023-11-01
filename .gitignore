@@ -57,3 +57,4 @@ docs/_build/
 target/
 /docs/source/teamgrid.rst
 /docs/source/gusto.rst
+.DS_Store

@@ -637,14 +637,15 @@ class MLLinearSolver(object):
         'ksp_type': 'preonly',
         'mat_type': 'matfree',
         'pc_type': 'python',
-        'pc_python_type': 'firedrake.HybridizationPC',
-        'hybridization': {'ksp_type': 'gmres',  #hybridization: this might just be where firedrake options merge with Petsc options
-                          'pc_type': 'gamg',
-                          'ksp_rtol': 1e-8,
-                          'mg_levels': {'ksp_type': 'chebyshev',
-                                        'ksp_max_it': 2,
-                                        'pc_type': 'bjacobi',
-                                        'sub_pc_type': 'ilu'}}
+        #'pc_python_type': 'firedrake.HybridizationPC', #change this to gusto.ShallowWaterMLPC
+        'pc_python_type': 'gusto.ShallowWaterMLPC'
+ #       'hybridization': {'ksp_type': 'gmres',  #hybridization: this might just be where firedrake options merge with Petsc options
+  #                        'pc_type': 'gamg',
+  #                        'ksp_rtol': 1e-8,
+ #                         'mg_levels': {'ksp_type': 'chebyshev',
+ #                                       'ksp_max_it': 2,
+ #                                       'pc_type': 'bjacobi',
+ #                                       'sub_pc_type': 'ilu'}}
     }
 
     def __init__(self, equation, alpha):

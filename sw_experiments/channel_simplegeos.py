@@ -20,7 +20,7 @@ if '--running-tests' in sys.argv:
 else:
     # setup resolution and timestepping parameters
     ref_dt = {1: 1500.}
-    tmax = 10*day
+    tmax = 1*day
     ndumps = 10
 
 #setup domain parameters
@@ -59,7 +59,7 @@ for ref_level, dt in ref_dt.items():
                                        no_normal_flow_bc_ids=[1, 2])
 
     # I/O
-    dirname = "linear_channel_simplegeos_gmres_ref%s_dt%s" % (ref_level, dt)
+    dirname = "linear_channel_simplegeos_pctest_ref%s_dt%s" % (ref_level, dt)
     dumpfreq = int(tmax / (ndumps*dt))
     output = OutputParameters(
         dirname=dirname,

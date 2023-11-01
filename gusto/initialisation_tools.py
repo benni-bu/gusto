@@ -185,7 +185,7 @@ def compressible_hydrostatic_balance(equation, theta0, rho0, exner0=None,
                   # block ILU is a direct solver!
                   'vert_hybridization': {'ksp_type': 'preonly',
                                          'pc_type': 'bjacobi',
-                                         'sub_pc_type': 'ilu'}}
+                                         'sub_pc_type': 'ilu'}} #this is how each block is inverted
 
     exner_solver = LinearVariationalSolver(exner_problem,
                                            solver_parameters=params,
