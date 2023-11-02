@@ -1,5 +1,6 @@
 """
-Baroclinic wave in a beta-channel. Inspired by test cases e and f in Ullrich and Jablonowski (2012).
+Rossby wave in a beta-channel. Inspired by test cases e and f in Ullrich and Jablonowski (2012).
+Currently, this does not work as intended (no Rossby wave triggered by perturbation).
 """
 
 from gusto import *

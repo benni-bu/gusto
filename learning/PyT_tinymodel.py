@@ -1,6 +1,7 @@
 """
 Build and train tiny example PyTorch model to be used in PtY_petsc_test.py
-lifted from https://pytorch.org/tutorials/beginner/introyt/trainingyt.html and https://pytorch.org/tutorials/beginner/introyt/modelsyt_tutorial.html
+lifted from https://pytorch.org/tutorials/beginner/introyt/trainingyt.html 
+and https://pytorch.org/tutorials/beginner/introyt/modelsyt_tutorial.html
 """
 
 import torch

@@ -1,5 +1,5 @@
 """
-This aims to set up an equivalent to Williamson 5 in a periodic channel domain. 
+Steady Geostrophic flow in a periodic channel domain. 
 solved with a discretisation of the linear shallow-water equations.
 """
 
