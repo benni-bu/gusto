@@ -1,11 +1,13 @@
 """
 This code is for getting a feel for how interfacing between PyTorch and 
-PETSc might work, using either PETSc's PCShell or Firedrakes PCBase class.
+PETSc might work, using either PETSc's PCShell or Firedrakes PCBase class. 
+Skeleton for this kindly provided by GPT3.5...
 """
 
 from firedrake import *
 import torch
 import petsc4py
+
 petsc4py.init()
 
 # Define your custom preconditioner class
