@@ -110,20 +110,3 @@ for ref_level, dt in ref_dt.items():
     # ------------------------------------------------------------------------ #
 
     stepper.run(t=0, tmax=tmax)
-
-
-
-
-    #Dexpr = H + u_max/2*( (f_0-beta_0*Ly/2) * (x[1] - Ly/2 - Ly/(2*pi)*sin(2*pi*x[1]/Ly)) 
-    #                     + beta_0/2 * (x[1]**2 - Ly*x[1]/pi*sin(2*pi*x[1]/Ly) 
-    #                                   - Ly**2/(2*pi**2)*cos(2*pi*x[1]/Ly))
-    #                     - Ly**2/3 * Ly**2/(2*pi**2))
-
-
-    #Dexpr = H - u_max/(2*g) * ( (f_0-beta_0*y0) * (x[1] - Ly/(2*pi)*sin(2*pi*x[1]/Ly)) 
-    #                            + beta_0 * (x[1]**2/2 - Ly*x[1]/(2*pi)*sin(2*pi*x[1]/Ly) 
-    #                                        - Ly**2/(4*pi**2)*cos(2*pi*x[1]/Ly)) )
-
-    # Dexpr = H - u_max/(4*g) * ( (2*f_0-2*beta_0*y0+beta_0*x[1]) * x[1] 
-    #                            - Ly/pi * sin(2*pi*x[1]/Ly) * (f_0-beta_0*y0+beta_0*x[1]) 
-    #                            - beta_0*Ly**2/(2*pi**2) * cos(2*pi*x[1]/Ly) ) 

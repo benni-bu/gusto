@@ -1,14 +1,12 @@
 """
 This code is for getting a feel for how interfacing between PyTorch and 
-PETSc might work: First just doing some simple PETSc operations on PyTorch
-output, but then also trying to implement a PyTorch preconditioner
-using either PETSc's PCShell or Firedrake's PCBase class. 
+PETSc might work by doing some simple PETSc operations on PyTorch
+output. 
 Skeleton for parts of this kindly provided by GPT3.5 :)
 """
 
-#from firedrake import *
+from firedrake.petsc import PETSc
 import torch
-from petsc4py import PETSc
 from PyT_tinymodel import TinyModel
 import numpy as np
 
@@ -87,38 +85,3 @@ petsout = add_vectors(stdvec, mloutvec)
 print(petsout-check)
 print('Yay we can make PETSc and PyTorch talk :)')
 
-
-"""
-The code below is a skeleton for trying out preconditioner implementation
-
-# Define your custom preconditioner class
-class MyPyTorchPreconditioner(PCBase):
-    def initialize(self, pc):
-        # Initialize any required variables or parameters for your preconditioner
-        pass
-    
-    def apply(self, pc, x, y):
-        with x.dat.vec_ro as x_vec, y.dat.vec as y_vec:
-            # Access the PETSc vectors from Firedrake data
-            x_array = x_vec.array
-            y_array = y_vec.array
-            
-            # Convert x_array to a PyTorch tensor
-            x_torch = torch.tensor(x_array)
-            
-            # Perform your PyTorch-based preconditioning operation
-            # For example:
-            # y_torch = your_pytorch_preconditioner_function(x_torch)
-            
-            # Convert the result back to a PETSc vector
-            y_vec.array = y_torch.numpy()  # Assuming y_torch is a PyTorch tensor
-            
-# Create a PETSc Krylov solver
-solver = petsc.KSP().create()
-
-# Create your custom preconditioner object
-my_preconditioner = MyPyTorchPreconditioner().p
-solver.setPC(my_preconditioner)
-
-# Rest of your Firedrake code to set up the problem and solve it
-"""

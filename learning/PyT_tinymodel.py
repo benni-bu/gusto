@@ -7,9 +7,6 @@ also useful.
 """
 
 import torch
-from torch.utils.data import DataLoader, TensorDataset, random_split
-import wandb
-import numpy as np
 
 class TinyModel(torch.nn.Module):
 
@@ -30,6 +27,10 @@ class TinyModel(torch.nn.Module):
 #avoid running the rest of the script when just importing ML model from elsewhere
 if __name__ == '__main__':
 
+    from torch.utils.data import DataLoader, TensorDataset, random_split
+    import wandb
+    import numpy as np
+    
     device = (
         "cuda"
         if torch.cuda.is_available()
