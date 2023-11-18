@@ -7,7 +7,9 @@ also useful.
 """
 
 import torch
+from firedrake.petsc import PETSc
 
+#define the model architecture
 class TinyModel(torch.nn.Module):
 
     def __init__(self):
@@ -24,13 +26,34 @@ class TinyModel(torch.nn.Module):
         return x
 
 
+# define matrix-free action of this model. Will need this when using it as a pc.
+# this roughly follows the description on https://www.firedrakeproject.org/petsc-interface.html
+class MatrixFreeApp():
+    def __init__(self, model) -> None:
+        #model is a loaded pytorch model including state dict.
+        self.model = model
+    def mult(self, x, y):
+        #need to convert PETSc vectors to torch tensors
+        x_array = x.getArray()
+        x_tensor = torch.tensor(x_array, dtype=torch.float32)
+        with torch.no_grad:
+            y_tensor = self.model(x_tensor)
+
+        #convert back to PETSc vectors
+        x_array = torch.tensor.numpy(x_tensor)
+        y_array = torch.tensor.numpy(y_tensor)
+        x = PETSc.Vec().createWithArray(x_array)
+        y = PETSc.Vec().createWithArray(y_array)
+
+
+
 #avoid running the rest of the script when just importing ML model from elsewhere
 if __name__ == '__main__':
 
     from torch.utils.data import DataLoader, TensorDataset, random_split
     import wandb
     import numpy as np
-    
+
     device = (
         "cuda"
         if torch.cuda.is_available()

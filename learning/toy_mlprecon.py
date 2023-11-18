@@ -4,29 +4,13 @@ model set up in PyT_tinymodel.py and using either Firedrakes PCBase class or PET
 """
 
 from firedrake.preconditioners import PCBase
-from firedrake.matrix_free.operators import ImplicitMatrixContext
+# from firedrake.matrix_free.operators import ImplicitMatrixContext
 from firedrake.petsc import PETSc
 import torch
-from PyT_tinymodel import TinyModel
-import numpy as np
+from PyT_tinymodel import (TinyModel, MatrixFreeApp)
 
-
-# Define your custom preconditioner class
 class ToyMLPreconditioner(PCBase):
     def initialize(self, pc):
-        #reviev this after finishing to see what we actually need (probably only a fraction...)
-        from firedrake import (FunctionSpace, Function, Constant, Cofunction,
-                               FiniteElement, TensorProductElement,
-                               TrialFunction, TrialFunctions, TestFunction,
-                               DirichletBC, interval, MixedElement, BrokenElement)
-        from firedrake.assemble import (allocate_matrix, OneFormAssembler,
-                                        TwoFormAssembler)
-        
-        # Extract PC context
-        prefix = pc.getOptionsPrefix() + "toy_mlprecon_"
-        _, P = pc.getOperators()
-        self.ctx = P.getPythonContext()
-
         #initialise PyTorch
         device = (
             "cuda"
@@ -41,31 +25,43 @@ class ToyMLPreconditioner(PCBase):
         model = TinyModel().to(device)
         model.load_state_dict(torch.load("tinymodel.pth"))
 
-        #define PC operator. Not sure if this operator symbolises the action of the preconditioner or of the system to be solved.
-        MLmat = 
 
+        _, P = pc.getOperators()
+        # extract the MatrixFreeB object from B. This assumes we pass the original operator matrix through via 
+        # the outer solver, which sets the context.
+        #ctx = B.getPythonContext()
+        #self.A = ctx.A
+        
+        #prefix = pc.getOptionsPrefix() + "toy_mlprecon_"
+
+        #define PC operator. In Firedrake 'interfacing directly with PETSc', they just use the original matrix for 
+        #this, but that's not what I want to do here.
+
+        #build ML model matrix-free context
+        Pctx = MatrixFreeApp(model)
+        #Set up PETSc operator based on that context
+        P.setType(P.type.PYTHON)
+        P.setPythonContext(Pctx)
+        P.SetUp()
+
+        #can I maybe just forego this and tell the model to do inference in the apply function?
 
         #set up KSP (this mimics the vertical hybridisation PC, not sure if this is the right way to do it for me)
-        ml_ksp = PETSc.KSP().create(comm=pc.comm)
-        ml_ksp.setOptionsPrefix(prefix)
-        ml_ksp.setOperators(MLmat)
-        ml_ksp.setUp()
-        ml_ksp.setFromOptions()
-        self.ml_ksp = ml_ksp
+        ml_pc = PETSc.PC().create()
+        #ml_pc.setOptionsPrefix(prefix)
+        ml_pc.setOperators(P)
+        ml_pc.setUp()
+        ml_pc.setFromOptions()
+        self.ml_pc = ml_pc
     
     def apply(self, pc, x, y):
-        with x.dat.vec_ro as x_vec, y.dat.vec as y_vec:
-            # Access the PETSc vectors from Firedrake data
-            x_array = x_vec.array
-            y_array = y_vec.array
-            
-            # Convert x_array to a PyTorch tensor
-            x_torch = torch.tensor(x_array)
-            
-            # Perform your PyTorch-based preconditioning operation
-            # For example:
-            # y_torch = your_pytorch_preconditioner_function(x_torch)
-            
-            # Convert the result back to a PETSc vector
-            y_vec.array = y_torch.numpy()  # Assuming y_torch is a PyTorch tensor
+        #with x.dat.vec_ro as x_vec, y.dat.vec as y_vec:
+        # y <- A^{-1}x
+        self.ml_pc.apply(x, y)    
+
+    def applyTranspose(self, pc, X, Y):
+        return super().applyTranspose(pc, X, Y)
+    
+    def update(self, pc):
+        return super().update(pc)
             

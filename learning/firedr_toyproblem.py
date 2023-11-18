@@ -3,14 +3,13 @@ Set up and solve an example firedrake problem that can be solved using the preco
 defined in toy_mlprecon.py
 """
 
-from firedrake import UnitSquareMesh
-from firedrake import FunctionSpace
-from firedrake import Function
+from firedrake import (UnitSquareMesh, FunctionSpace, Function, LinearVariationalProblem,
+                       LinearVariationalSolver, DirichletBC)
 from firedrake.petsc import PETSc
 from toy_mlprecon import ToyMLPreconditioner
 
 #define firedrake mesh and associated function space
-mesh = UnitSquareMesh(10, 10)
+mesh = UnitSquareMesh(5, 5)
 V = FunctionSpace(mesh, "CG", 1)
 
 # Create Firedrake functions (vectors) associated with the FunctionSpace.
