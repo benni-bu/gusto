@@ -26,8 +26,8 @@ def create_matrix_and_vectors():
 
 def set_coefficients(A, X, B):
     # Set coefficients in the matrix A and vectors X, B
+    A.setValues(range(10), range(10), 2*np.eye(10) + np.eye(10, k=1) + np.eye(10, k=-1), PETSc.InsertMode.INSERT_VALUES)
     A.assemble()
-    A.setDiagonal(PETSc.Vec().createWithArray(2*np.ones(10)))
 
     # Set a right-hand side vector
     B.setArray(PETSc.Vec().createWithArray(np.random.rand(10)))
@@ -39,12 +39,15 @@ def solve_linear_system(A, X, B):
     # Set the operator (coefficient matrix) for the linear solver
     ksp.setOperators(A)
 
-    # Create an instance of your preconditioner
+    #define the pc so PETSc knows what to do when instantiating the ML context
+    pc = ksp.pc
+
+    # Create an instance of the preconditioner
     ml_precon = ToyMLPreconditioner()
 
     # Set the preconditioner for the linear solver
-    ksp.getPC().setType(PETSc.PC.Type.PYTHON)
-    ksp.getPC().setPythonContext(ml_precon)
+    ksp.setType(PETSc.PC.Type.PYTHON)
+    ksp.setPythonContext(ml_precon)
 
     ksp.solve(B, X)
 

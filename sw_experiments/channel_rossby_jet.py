@@ -19,8 +19,8 @@ if '--running-tests' in sys.argv:
     ndumps = 1
 else:
     # setup resolution and timestepping parameters
-    ref_dt = {1: 1500.}
-    tmax = 50*day
+    ref_dt = {3: 300.}
+    tmax = 3*day
     ndumps = 50
 
 #setup domain parameters

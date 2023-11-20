@@ -61,3 +61,8 @@ target/
 #user data
 .DS_Store
 wandb/
+
+#model output
+*.nc
+*.pvd
+*.vtu

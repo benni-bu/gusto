@@ -9,6 +9,14 @@ from firedrake.petsc import PETSc
 import torch
 from PyT_tinymodel import (TinyModel, MatrixFreeApp)
 
+class TestCtx():
+    def __init__(self):
+        pass
+
+    def mult(self, mat, x, y):
+        # y <- A x
+        y = x
+
 class ToyMLPreconditioner(PCBase):
     def initialize(self, pc):
         #initialise PyTorch
@@ -23,26 +31,26 @@ class ToyMLPreconditioner(PCBase):
 
         #load PyTorch model
         model = TinyModel().to(device)
-        model.load_state_dict(torch.load("tinymodel.pth"))
+        model.load_state_dict(torch.load("/Users/GUSTO/environments/firedrake/src/gusto/learning/tinymodel.pth"))
 
-
+        #this is how P in defined in preconditioners.py as well as in the firedrake examples. But where does it get
+        #the operators from? We're not passing them in when instantiating the context!
         _, P = pc.getOperators()
-        # extract the MatrixFreeB object from B. This assumes we pass the original operator matrix through via 
-        # the outer solver, which sets the context.
-        #ctx = B.getPythonContext()
-        #self.A = ctx.A
-        
-        #prefix = pc.getOptionsPrefix() + "toy_mlprecon_"
 
         #define PC operator. In Firedrake 'interfacing directly with PETSc', they just use the original matrix for 
         #this, but that's not what I want to do here.
 
         #build ML model matrix-free context
         Pctx = MatrixFreeApp(model)
+
+        #sub in test pctx for debugging purposes
+        #Pctx = TestCtx()
+
         #Set up PETSc operator based on that context
-        P.setType(P.type.PYTHON)
+        
         P.setPythonContext(Pctx)
         P.SetUp()
+        P.setType(P.type.PYTHON)
 
         #can I maybe just forego this and tell the model to do inference in the apply function?
 
@@ -63,5 +71,10 @@ class ToyMLPreconditioner(PCBase):
         return super().applyTranspose(pc, X, Y)
     
     def update(self, pc):
-        return super().update(pc)
+        prefix = pc.getOptionsPrefix()
+        if prefix is None:
+            prefix = ""
+        prefix += "toy_mlprecon_"
+        pc.setOptionsPrefix(prefix)
+        super().update(pc)
             
