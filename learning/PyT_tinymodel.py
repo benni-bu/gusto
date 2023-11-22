@@ -26,27 +26,6 @@ class TinyModel(torch.nn.Module):
         return x
 
 
-# define matrix-free action of this model. Will need this when using it as a pc.
-# this roughly follows the description on https://www.firedrakeproject.org/petsc-interface.html
-class MatrixFreeApp():
-    def __init__(self, model) -> None:
-        #model is a loaded pytorch model including state dict.
-        self.model = model
-    def mult(self, x, y):
-        #need to convert PETSc vectors to torch tensors
-        x_array = x.getArray()
-        x_tensor = torch.tensor(x_array, dtype=torch.float32)
-        with torch.no_grad:
-            y_tensor = self.model(x_tensor)
-
-        #convert back to PETSc vectors
-        x_array = torch.tensor.numpy(x_tensor)
-        y_array = torch.tensor.numpy(y_tensor)
-        x = PETSc.Vec().createWithArray(x_array)
-        y = PETSc.Vec().createWithArray(y_array)
-
-
-
 #avoid running the rest of the script when just importing ML model from elsewhere
 if __name__ == '__main__':
 
@@ -65,8 +44,8 @@ if __name__ == '__main__':
 
     tinymodel = TinyModel().to(device)
 
-    #generate some training data (solving a simple tridiagonal linear system)
-    matrix = 2*np.eye(10) + np.eye(10, k=1) + np.eye(10, k=-1)
+    #generate some training data (solving a 1D Laplacian linear system)
+    matrix = 2*np.eye(10) - np.eye(10, k=1) - np.eye(10, k=-1)
     #generate 1000 vectors of size 10, multiply them with matrix to get RHS vectors.
     #We want our network to learn the mapping from the RHS vector to the LHS vector
     #in a system Ax=b. Here, x:=vec_out, b:=vec_in

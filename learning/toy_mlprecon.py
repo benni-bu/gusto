@@ -9,6 +9,60 @@ from firedrake.petsc import PETSc
 import torch
 from PyT_tinymodel import (TinyModel, MatrixFreeApp)
 
+#--------------------------#
+# define operator contexts #
+#--------------------------#
+
+#main operator matrix
+class Laplace1D(object):
+
+    def create(self, A):
+        LOG('Laplace1D.create()')
+        M, N = A.getSize()
+        assert M == N
+
+    def destroy(self, A):
+        LOG('Laplace1D.destroy()')
+
+    def view(self, A, vw):
+        LOG('Laplace1D.view()')
+
+    def setFromOptions(self, A):
+        LOG('Laplace1D.setFromOptions()')
+
+    def setUp(self, A):
+        LOG('Laplace1D.setUp()')
+
+    def assemblyBegin(self, A, flag):
+        LOG('Laplace1D.assemblyBegin()')
+
+    def assemblyEnd(self, A, flag):
+        LOG('Laplace1D.assemblyEnd()')
+
+    def getDiagonal(self, A, d):
+        LOG('Laplace1D.getDiagonal()')
+        M, N = A.getSize()
+        h = 1.0/(M-1)
+        d.set(2.0/h**2)
+
+    def mult(self, A, x, y):
+        LOG('Laplace1D.mult()')
+        M, N = A.getSize()
+        xx = x.getArray(readonly=1) # to numpy array
+        yy = y.getArray(readonly=0) # to numpy array
+        yy[0]    =  2.0*xx[0] - xx[1]
+        yy[1:-1] = - xx[:-2] + 2.0*xx[1:-1] - xx[2:]
+        yy[-1]   = - xx[-2] + 2.0*xx[-1]
+        h = 1.0/(M-1)
+        yy *= 1.0/h**2
+
+    def multTranspose(self, A, x, y):
+        LOG('Laplace1D.multTranspose()')
+        self.mult(A, x, y)
+
+
+
+# simplest possible matrix-free context for testing purposes
 class TestCtx():
     def __init__(self):
         pass
@@ -16,6 +70,30 @@ class TestCtx():
     def mult(self, mat, x, y):
         # y <- A x
         y = x
+
+# matrix-free action of ML model. Will need this when using it as a pc.
+# this roughly follows the description on https://www.firedrakeproject.org/petsc-interface.html
+class MatrixFreeApp():
+    def __init__(self, model) -> None:
+        #model is a loaded pytorch model including state dict.
+        self.model = model
+    def mult(self, x, y):
+        #need to convert PETSc vectors to torch tensors
+        x_array = x.getArray()
+        x_tensor = torch.tensor(x_array, dtype=torch.float32)
+        with torch.no_grad:
+            y_tensor = self.model(x_tensor)
+
+        #convert back to PETSc vectors
+        x_array = torch.tensor.numpy(x_tensor)
+        y_array = torch.tensor.numpy(y_tensor)
+        x = PETSc.Vec().createWithArray(x_array)
+        y = PETSc.Vec().createWithArray(y_array)
+
+
+#------------------------#
+# define preconditioners #
+#------------------------#
 
 class ToyMLPreconditioner(PCBase):
     def initialize(self, pc):
