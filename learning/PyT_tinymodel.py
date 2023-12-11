@@ -7,7 +7,6 @@ also useful.
 """
 
 import torch
-from firedrake.petsc import PETSc
 
 #define the model architecture
 class TinyModel(torch.nn.Module):

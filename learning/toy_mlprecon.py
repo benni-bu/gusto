@@ -7,13 +7,22 @@ from firedrake.preconditioners import PCBase
 # from firedrake.matrix_free.operators import ImplicitMatrixContext
 from firedrake.petsc import PETSc
 import torch
-from PyT_tinymodel import (TinyModel, MatrixFreeApp)
+from PyT_tinymodel import TinyModel
+
+OptDB = PETSc.Options()
+
+INFO = OptDB.hasName('info')
+
+def LOG(arg):
+    if INFO:
+        print(arg)
 
 #--------------------------#
 # define operator contexts #
 #--------------------------#
 
-#main operator matrix
+# main operator matrix (taken from PETSc example: 
+# https://github.com/petsc/petsc/blob/main/src/ksp/ksp/tutorials)
 class Laplace1D(object):
 
     def create(self, A):
@@ -71,22 +80,24 @@ class TestCtx():
         # y <- A x
         y = x
 
+
 # matrix-free action of ML model. Will need this when using it as a pc.
 # this roughly follows the description on https://www.firedrakeproject.org/petsc-interface.html
-class MatrixFreeApp():
+class MLCtx():
     def __init__(self, model) -> None:
         #model is a loaded pytorch model including state dict.
         self.model = model
-    def mult(self, x, y):
+    def mult(self, mat, x, y):
         #need to convert PETSc vectors to torch tensors
         x_array = x.getArray()
         x_tensor = torch.tensor(x_array, dtype=torch.float32)
-        with torch.no_grad:
+        
+        with torch.no_grad():
             y_tensor = self.model(x_tensor)
 
         #convert back to PETSc vectors
-        x_array = torch.tensor.numpy(x_tensor)
-        y_array = torch.tensor.numpy(y_tensor)
+        x_array = torch.Tensor.numpy(x_tensor)
+        y_array = torch.Tensor.numpy(y_tensor)
         x = PETSc.Vec().createWithArray(x_array)
         y = PETSc.Vec().createWithArray(y_array)
 
@@ -95,6 +106,40 @@ class MatrixFreeApp():
 # define preconditioners #
 #------------------------#
 
+# Jacobi Preconditioner for sanity check (taken from PETSc example: 
+# https://github.com/petsc/petsc/blob/main/src/ksp/ksp/tutorials)
+class Jacobi(object):
+
+    def create(self, pc):
+        LOG('Jacobi.create()')
+        self.diag = None
+
+    def destroy(self, pc):
+        LOG('Jacobi.destroy()')
+        if self.diag:
+            self.diag.destroy()
+
+    def view(self, pc, vw):
+        LOG('Jacobi.view()')
+
+    def setFromOptions(self, pc):
+        LOG('Jacobi.setFromOptions()')
+
+    def setUp(self, pc):
+        LOG('Jacobi.setUp()')
+        A, B = pc.getOperators()
+        self.diag = B.getDiagonal(self.diag)
+
+    def apply(self, pc, x, y):
+        LOG('Jacobi.apply()')
+        y.pointwiseDivide(x, self.diag)
+
+    def applyTranspose(self, pc, x, y):
+        LOG('Jacobi.applyTranspose()')
+        self.apply(pc, x, y)
+
+
+# actual ML preconditioner
 class ToyMLPreconditioner(PCBase):
     def initialize(self, pc):
         #initialise PyTorch
@@ -112,23 +157,24 @@ class ToyMLPreconditioner(PCBase):
         model.load_state_dict(torch.load("/Users/GUSTO/environments/firedrake/src/gusto/learning/tinymodel.pth"))
 
         #this is how P in defined in preconditioners.py as well as in the firedrake examples. But where does it get
-        #the operators from? We're not passing them in when instantiating the context!
+        #the operators from? We're not passing them in when instantiating the context! - It comes from the ksp object
+        # we set in the driver.
         _, P = pc.getOperators()
 
         #define PC operator. In Firedrake 'interfacing directly with PETSc', they just use the original matrix for 
         #this, but that's not what I want to do here.
 
         #build ML model matrix-free context
-        Pctx = MatrixFreeApp(model)
+        Pctx = MLCtx(model)
 
         #sub in test pctx for debugging purposes
         #Pctx = TestCtx()
 
         #Set up PETSc operator based on that context
         
+        P.setType(PETSc.Mat.Type.PYTHON)
         P.setPythonContext(Pctx)
-        P.SetUp()
-        P.setType(P.type.PYTHON)
+        P.setUp()
 
         #can I maybe just forego this and tell the model to do inference in the apply function?
 

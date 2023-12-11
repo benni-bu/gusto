@@ -5,49 +5,39 @@ defined in toy_mlprecon.py
 
 from firedrake.petsc import PETSc
 import numpy as np
-from toy_mlprecon import ToyMLPreconditioner
+from toy_mlprecon import (ToyMLPreconditioner, Laplace1D, Jacobi)
 
-def create_matrix_and_vectors():
-    # Initialize PETSc
-    PETSc.Sys.popErrorHandler()  # Suppresses error handler to avoid MPI initialization warning
-    PETSc.Log.begin()
-
-    # Create a matrix A
-    A = PETSc.Mat().create()
-    A.setSizes([10, 10])  # Adjust the size according to your problem
-    #A.setType(PETSc.Mat.Type.MATSEQAIJ)  # Sequential AIJ format
-    A.setFromOptions()
+def set_ops():
+    # Set coefficients in the matrix A and RHS vector B
+    A = PETSc.Mat()
+    A.create(comm=PETSc.COMM_WORLD)
+    A.setSizes([10,10])
+    A.setType(PETSc.Mat.Type.PYTHON)
+    A.setPythonContext(Laplace1D())
     A.setUp()
 
-    # Create vectors X (solution) and B (right-hand side)
-    X, B = A.createVecs()
+    # Set a right-hand side vector
+    X, B = A.getVecs()
+    B.setArray(np.random.rand(10))
 
     return A, X, B
-
-def set_coefficients(A, X, B):
-    # Set coefficients in the matrix A and vectors X, B
-    A.setValues(range(10), range(10), 2*np.eye(10) + np.eye(10, k=1) + np.eye(10, k=-1), PETSc.InsertMode.INSERT_VALUES)
-    A.assemble()
-
-    # Set a right-hand side vector
-    B.setArray(PETSc.Vec().createWithArray(np.random.rand(10)))
 
 def solve_linear_system(A, X, B):
     # Create a linear solver context
     ksp = PETSc.KSP().create()
+    ksp.setType(PETSc.KSP.Type.CG)
+    ksp.setTolerances(rtol=1e-5)
+    ksp.setTolerances(max_it=100)
 
     # Set the operator (coefficient matrix) for the linear solver
     ksp.setOperators(A)
 
     #define the pc so PETSc knows what to do when instantiating the ML context
-    pc = ksp.pc
-
-    # Create an instance of the preconditioner
-    ml_precon = ToyMLPreconditioner()
+    pc = ksp.getPC()
 
     # Set the preconditioner for the linear solver
-    ksp.setType(PETSc.PC.Type.PYTHON)
-    ksp.setPythonContext(ml_precon)
+    pc.setType(PETSc.PC.Type.PYTHON)
+    pc.setPythonContext(ToyMLPreconditioner())
 
     ksp.solve(B, X)
 
@@ -61,10 +51,7 @@ def solve_linear_system(A, X, B):
     X.destroy()
     B.destroy()
 
-    # Finalize PETSc
-    PETSc.finalize()
 
 if __name__ == "__main__":
-    A, X, B = create_matrix_and_vectors()
-    set_coefficients(A, X, B)
+    A, X, B = set_ops()
     solve_linear_system(A, X, B)
