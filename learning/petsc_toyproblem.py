@@ -20,6 +20,9 @@ def set_ops():
     X, B = A.getVecs()
     B.setArray(np.random.rand(10))
 
+    B_array = B.getArray()
+    print("Input RHS vector B:", B_array)
+
     return A, X, B
 
 def solve_linear_system(A, X, B):
@@ -38,12 +41,21 @@ def solve_linear_system(A, X, B):
     # Set the preconditioner for the linear solver
     pc.setType(PETSc.PC.Type.PYTHON)
     pc.setPythonContext(ToyMLPreconditioner())
+    #pc.setPythonContext(Jacobi())
 
     ksp.solve(B, X)
 
     # Print the solution vector
     X_array = X.getArray()
     print("Solution vector X:", X_array)
+
+    # print error norm
+    r = B.duplicate()
+    A.mult(X, r)
+    r.aypx(-1, B)
+    rnorm = r.norm()
+    PETSc.Sys.Print('error norm = %g' % rnorm,
+                    comm=PETSc.COMM_WORLD)
 
     # Free resources
     ksp.destroy()
