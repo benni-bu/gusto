@@ -91,14 +91,15 @@ class MLCtx():
         LOG('MLPC.mult')
         #need to convert PETSc vectors to torch tensors
         x_array = x.getArray()
+        LOG(f'PC Input vector: {x_array}')
         x_tensor = torch.tensor(x_array, dtype=torch.float32)
         
         with torch.no_grad():
-            LOG('running ML inference')
             y_tensor = self.model(x_tensor)
 
         #convert back to PETSc vector
         y_array = torch.Tensor.numpy(y_tensor)
+        LOG(f'PC Output vector: {y_array}')
         y.setArray(y_array)
 
 
