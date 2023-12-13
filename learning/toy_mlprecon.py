@@ -88,19 +88,18 @@ class MLCtx():
         #model is a loaded pytorch model including state dict.
         self.model = model
     def mult(self, mat, x, y):
-        LOG('applying MLPC')
+        LOG('MLPC.mult')
         #need to convert PETSc vectors to torch tensors
         x_array = x.getArray()
         x_tensor = torch.tensor(x_array, dtype=torch.float32)
         
         with torch.no_grad():
+            LOG('running ML inference')
             y_tensor = self.model(x_tensor)
 
-        #convert back to PETSc vectors
-        x_array = torch.Tensor.numpy(x_tensor)
+        #convert back to PETSc vector
         y_array = torch.Tensor.numpy(y_tensor)
-        x = PETSc.Vec().createWithArray(x_array)
-        y = PETSc.Vec().createWithArray(y_array)
+        y.setArray(y_array)
 
 
 #------------------------#
@@ -190,6 +189,7 @@ class ToyMLPreconditioner(PCBase):
     def apply(self, pc, x, y):
         #with x.dat.vec_ro as x_vec, y.dat.vec as y_vec:
         # y <- A^{-1}x
+        LOG('applying MLPC')
         self.ml_pc.apply(x, y)    
 
     def applyTranspose(self, pc, X, Y):

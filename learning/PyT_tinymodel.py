@@ -44,7 +44,7 @@ if __name__ == '__main__':
     tinymodel = TinyModel().to(device)
 
     #generate some training data (solving a 1D Laplacian linear system)
-    matrix = 2*np.eye(10) - np.eye(10, k=1) - np.eye(10, k=-1)
+    matrix = 2*np.eye(10) - np.eye(10, k=-1) - np.eye(10, k=1)
     #generate 1000 vectors of size 10, multiply them with matrix to get RHS vectors.
     #We want our network to learn the mapping from the RHS vector to the LHS vector
     #in a system Ax=b. Here, x:=vec_out, b:=vec_in
