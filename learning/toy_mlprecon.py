@@ -88,7 +88,7 @@ class MLCtx():
         #model is a loaded pytorch model including state dict.
         self.model = model
     def mult(self, mat, x, y):
-        LOG('MLPC.mult')
+        LOG('MLCtx.mult()')
         #need to convert PETSc vectors to torch tensors
         x_array = x.getArray()
         LOG(f'PC Input vector: {x_array}')

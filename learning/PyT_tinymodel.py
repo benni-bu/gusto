@@ -71,7 +71,7 @@ if __name__ == '__main__':
     validation_loader = DataLoader(validation_set, batch_size=100, shuffle=False)
 
 
-    optimizer = torch.optim.SGD(tinymodel.parameters(), lr=0.001, momentum=0.9)
+    optimizer = torch.optim.SGD(tinymodel.parameters(), lr=0.01, momentum=0.9)
     loss_fn = torch.nn.MSELoss()
 
 
@@ -82,7 +82,7 @@ if __name__ == '__main__':
         
         # track hyperparameters and run metadata
         config={
-        "learning_rate": 0.001,
+        "learning_rate": 0.01,
         "layers": 2,
         "optim": "SGD",
         "architecture": "dense",
