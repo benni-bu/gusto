@@ -1,6 +1,7 @@
 """
-Here we define a 'toy' implementation of a ml preconditioner, making use of the tiny PyTorch 
-model set up in PyT_tinymodel.py and using either Firedrakes PCBase class or PETSc's PCShell.
+This code sets up the matrix-free operator contexts and the preconditioners 
+used in the example ML preconditioning problem. The ML preconditioner is set
+up using firedrake's PCBase class. 
 """
 
 from firedrake.preconditioners import PCBase
