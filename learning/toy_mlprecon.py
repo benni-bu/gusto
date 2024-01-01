@@ -79,7 +79,7 @@ class TestCtx():
 
     def mult(self, mat, x, y):
         # y <- A x
-        y = x
+        y.setArray(x)
 
 
 # matrix-free action of ML model. Will need this when using it as a pc.
@@ -173,17 +173,18 @@ class ToyMLPreconditioner(PCBase):
         #Pctx = TestCtx()
 
         #Set up PETSc operator based on that context
-        
-        P.setType(PETSc.Mat.Type.PYTHON)
-        P.setPythonContext(Pctx)
-        P.setUp()
+        P_ml = PETSc.Mat().create()
+        P_ml.setSizes(P.getSizes())
+        P_ml.setType(PETSc.Mat.Type.PYTHON)
+        P_ml.setPythonContext(Pctx)
+        P_ml.setUp()
 
         #can I maybe just forego this and tell the model to do inference in the apply function?
 
         #set up KSP (this mimics the vertical hybridisation PC, not sure if this is the right way to do it for me)
         ml_pc = PETSc.PC().create()
         #ml_pc.setOptionsPrefix(prefix)
-        ml_pc.setOperators(P)
+        ml_pc.setOperators(P_ml)
         ml_pc.setUp()
         ml_pc.setFromOptions()
         self.ml_pc = ml_pc
