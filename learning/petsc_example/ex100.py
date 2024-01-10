@@ -26,10 +26,13 @@ def RunTest():
     ksp.create(comm=PETSc.COMM_WORLD)
     ksp.setType(PETSc.KSP.Type.PYTHON)
     ksp.setPythonContext(example100.ConjGrad())
+    #ksp.setType(PETSc.KSP.Type.CG)
+    ksp.setTolerances(max_it=40)
 
     pc = ksp.getPC()
-    pc.setType(PETSc.PC.Type.PYTHON)
-    pc.setPythonContext(example100.Jacobi())
+    pc.setType(PETSc.PC.Type.NONE) #for reference runs without pc
+    #pc.setType(PETSc.PC.Type.PYTHON)
+    #pc.setPythonContext(example100.Jacobi())
 
     ksp.setOperators(A, A)
     ksp.setFromOptions()

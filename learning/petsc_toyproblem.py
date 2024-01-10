@@ -11,14 +11,15 @@ def set_ops():
     # Set coefficients in the matrix A and RHS vector B
     A = PETSc.Mat()
     A.create(comm=PETSc.COMM_WORLD)
-    A.setSizes([10,10])
+    A.setSizes([100,100])
     A.setType(PETSc.Mat.Type.PYTHON)
     A.setPythonContext(Laplace1D())
     A.setUp()
 
     # Set a right-hand side vector
     X, B = A.getVecs()
-    B.setArray(np.random.rand(10))
+    #B.setArray(np.random.rand(10))
+    B.setArray(np.ones(100))
 
     B_array = B.getArray()
     print("Input RHS vector B:", B_array)
@@ -28,9 +29,9 @@ def set_ops():
 def solve_linear_system(A, X, B):
     # Create a linear solver context
     ksp = PETSc.KSP().create()
-    ksp.setType(PETSc.KSP.Type.CG)
+    ksp.setType(PETSc.KSP.Type.GCR)
     ksp.setTolerances(rtol=1e-5)
-    ksp.setTolerances(max_it=100)
+    #ksp.setTolerances(max_it=40)
 
     # Set the operator (coefficient matrix) for the linear solver
     ksp.setOperators(A)
@@ -39,6 +40,8 @@ def solve_linear_system(A, X, B):
     pc = ksp.getPC()
 
     # Set the preconditioner for the linear solver
+    #pc.setType(PETSc.PC.Type.NONE) #for reference runs without pc
+    #pc.setType(PETSc.PC.Type.SOR)  #for reference runs with SOR
     pc.setType(PETSc.PC.Type.PYTHON)
     pc.setPythonContext(ToyMLPreconditioner())
     #pc.setPythonContext(Jacobi())

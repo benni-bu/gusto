@@ -14,9 +14,9 @@ class TinyModel(torch.nn.Module):
     def __init__(self):
         super(TinyModel, self).__init__()
 
-        self.linear1 = torch.nn.Linear(10, 20)
+        self.linear1 = torch.nn.Linear(100, 200)
         self.activation = torch.nn.ReLU()
-        self.linear2 = torch.nn.Linear(20, 10)
+        self.linear2 = torch.nn.Linear(200, 100)
 
     def forward(self, x):
         x = self.linear1(x)
@@ -45,13 +45,13 @@ if __name__ == '__main__':
     tinymodel = TinyModel().to(device)
 
     #generate some training data (solving a 1D Laplacian linear system)
-    matrix = 2*np.eye(10) - np.eye(10, k=-1) - np.eye(10, k=1)
+    matrix = 2*np.eye(100) - np.eye(100, k=-1) - np.eye(100, k=1)
     plt.imshow(matrix)
     plt.show()
     #generate 1000 vectors of size 10, multiply them with matrix to get RHS vectors.
     #We want our network to learn the mapping from the RHS vector to the LHS vector
     #in a system Ax=b. Here, x:=vec_out, b:=vec_in
-    vec_out = np.random.rand(1000, 10)
+    vec_out = np.random.rand(1000, 100)
     vec_in = np.dot(vec_out, matrix)
 
     # Convert data to PyTorch tensors
@@ -74,7 +74,7 @@ if __name__ == '__main__':
     validation_loader = DataLoader(validation_set, batch_size=100, shuffle=False)
 
 
-    optimizer = torch.optim.SGD(tinymodel.parameters(), lr=0.01, momentum=0.9)
+    optimizer = torch.optim.SGD(tinymodel.parameters(), lr=0.06, momentum=0.9)
     loss_fn = torch.nn.MSELoss()
 
 
@@ -85,11 +85,11 @@ if __name__ == '__main__':
         
         # track hyperparameters and run metadata
         config={
-        "learning_rate": 0.01,
+        "learning_rate": 0.06,
         "layers": 2,
         "optim": "SGD",
         "architecture": "dense",
-        "dataset": "simplelinalg",
+        "dataset": "randompoisson_100by100",
         "epochs": 10,
         }
     )

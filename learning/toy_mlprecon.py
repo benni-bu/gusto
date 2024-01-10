@@ -92,7 +92,7 @@ class MLCtx():
         LOG('MLCtx.mult()')
         #need to convert PETSc vectors to torch tensors
         x_array = x.getArray()
-        LOG(f'PC Input vector: {x_array}')
+        #LOG(f'PC Input vector: {x_array}')
         x_tensor = torch.tensor(x_array, dtype=torch.float32)
         
         with torch.no_grad():
@@ -100,7 +100,7 @@ class MLCtx():
 
         #convert back to PETSc vector
         y_array = torch.Tensor.numpy(y_tensor)
-        LOG(f'PC Output vector: {y_array}')
+        #LOG(f'PC Output vector: {y_array}')
         y.setArray(y_array)
 
 
@@ -173,27 +173,28 @@ class ToyMLPreconditioner(PCBase):
         #Pctx = TestCtx()
 
         #Set up PETSc operator based on that context
-        P_ml = PETSc.Mat().create()
-        P_ml.setSizes(P.getSizes())
-        P_ml.setType(PETSc.Mat.Type.PYTHON)
-        P_ml.setPythonContext(Pctx)
-        P_ml.setUp()
+        self.P_ml = PETSc.Mat().create()
+        self.P_ml.setSizes(P.getSizes())
+        self.P_ml.setType(PETSc.Mat.Type.PYTHON)
+        self.P_ml.setPythonContext(Pctx)
+        self.P_ml.setUp()
 
         #can I maybe just forego this and tell the model to do inference in the apply function?
 
         #set up KSP (this mimics the vertical hybridisation PC, not sure if this is the right way to do it for me)
-        ml_pc = PETSc.PC().create()
+        #ml_pc = PETSc.PC().create()
         #ml_pc.setOptionsPrefix(prefix)
-        ml_pc.setOperators(P_ml)
-        ml_pc.setUp()
-        ml_pc.setFromOptions()
-        self.ml_pc = ml_pc
+        #ml_pc.setOperators(P_ml)
+        #ml_pc.setUp()
+        #ml_pc.setFromOptions()
+        #self.ml_pc = ml_pc
     
     def apply(self, pc, x, y):
         #with x.dat.vec_ro as x_vec, y.dat.vec as y_vec:
-        # y <- A^{-1}x
+        # y <- ML(x)
         LOG('applying MLPC')
-        self.ml_pc.apply(x, y)    
+        self.P_ml.mult(x, y)
+        #self.ml_pc.apply(x, y)    
 
     def applyTranspose(self, pc, X, Y):
         return super().applyTranspose(pc, X, Y)
