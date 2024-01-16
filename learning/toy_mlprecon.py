@@ -8,7 +8,7 @@ from firedrake.preconditioners import PCBase
 # from firedrake.matrix_free.operators import ImplicitMatrixContext
 from firedrake.petsc import PETSc
 import torch
-from PyT_tinymodel import TinyModel
+from PyT_tinymodels import TinyModel
 
 OptDB = PETSc.Options()
 
@@ -156,7 +156,7 @@ class ToyMLPreconditioner(PCBase):
 
         #load PyTorch model
         model = TinyModel().to(device)
-        model.load_state_dict(torch.load("/Users/GUSTO/environments/firedrake/src/gusto/learning/tinymodel.pth"))
+        model.load_state_dict(torch.load("/Users/GUSTO/environments/firedrake/src/gusto/learning/poisson.pth"))
 
         #this is how P in defined in preconditioners.py as well as in the firedrake examples. But where does it get
         #the operators from? We're not passing them in when instantiating the context! - It comes from the ksp object
@@ -178,8 +178,6 @@ class ToyMLPreconditioner(PCBase):
         self.P_ml.setType(PETSc.Mat.Type.PYTHON)
         self.P_ml.setPythonContext(Pctx)
         self.P_ml.setUp()
-
-        #can I maybe just forego this and tell the model to do inference in the apply function?
 
         #set up KSP (this mimics the vertical hybridisation PC, not sure if this is the right way to do it for me)
         #ml_pc = PETSc.PC().create()
