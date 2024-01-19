@@ -59,7 +59,7 @@ for ref_level, dt in ref_dt.items():
                                        no_normal_flow_bc_ids=[1, 2])
 
     # I/O
-    dirname = "linear_channel_simplegeos_pctest_ref%s_dt%s" % (ref_level, dt)
+    dirname = "linear_channel_simplegeos_firedrtest_ref%s_dt%s" % (ref_level, dt)
     dumpfreq = int(tmax / (ndumps*dt))
     output = OutputParameters(
         dirname=dirname,
@@ -74,10 +74,11 @@ for ref_level, dt in ref_dt.items():
 
     # solver
     alpha = 0.5
-    linear_solver = MLLinearSolver(eqns, alpha)
+    #linear_solver = MLLinearSolver(eqns, alpha)
 
     # Time stepper
-    stepper = SemiImplicitQuasiNewton(eqns, io, transport_schemes, transport_methods, linear_solver=linear_solver)
+    #stepper = SemiImplicitQuasiNewton(eqns, io, transport_schemes, transport_methods, linear_solver=linear_solver)
+    stepper = SemiImplicitQuasiNewton(eqns, io, transport_schemes, transport_methods)
 
     # ------------------------------------------------------------------------ #
     # Initial conditions
