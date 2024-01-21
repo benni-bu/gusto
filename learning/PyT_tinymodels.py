@@ -7,9 +7,25 @@ also useful.
 """
 
 import torch
+from torchvision import models
 
 #define the model architecture
 class TinyModel(torch.nn.Module):
+
+    def __init__(self):
+        super(TinyModel, self).__init__()
+
+        self.linear1 = torch.nn.Linear(100, 200)
+        self.activation = torch.nn.ReLU()
+        self.linear2 = torch.nn.Linear(200, 100)
+
+    def forward(self, x):
+        x = self.linear1(x)
+        x = self.activation(x)
+        x = self.linear2(x)
+        return x
+    
+class TinyCNN(torch.nn.Module):
 
     def __init__(self):
         super(TinyModel, self).__init__()
@@ -140,6 +156,8 @@ def poissontrain():
     torch.save(tinymodel.state_dict(), "/Users/GUSTO/environments/firedrake/src/gusto/learning/poisson.pth")
     print("Saved PyTorch Model State to poisson.pth")
 
+    wandb.finish()
+
 
 def helmholtztrain():
     from torch.utils.data import DataLoader, TensorDataset, random_split
@@ -258,6 +276,8 @@ def helmholtztrain():
 
     torch.save(tinymodel.state_dict(), "/Users/GUSTO/environments/firedrake/src/gusto/learning/helmholtz.pth")
     print("Saved PyTorch Model State to helmholtz.pth")
+
+    wandb.finish()
 
 
 #avoid running the rest of the script when just importing ML model from elsewhere
