@@ -51,7 +51,10 @@ class DualConv(nn.Module):
 class Contract(nn.Module):
     def __init__(self, input_ch, output_ch):
         super(Contract, self).__init__()
-        self.down_conv = nn.Sequential(nn.MaxPool1d(2), DualConv(input_ch, output_ch))
+        #doing average pooling instead of max pooling because we want to smooth over the
+        #field instead of picking 'most important feature'
+        #kernel size = stride = 2, so grid is coarsened by factor of 2 each time.
+        self.down_conv = nn.Sequential(nn.AvgPool1d(2), DualConv(input_ch, output_ch))
     def forward(self, x):
         return self.down_conv(x)
 
@@ -63,8 +66,9 @@ class Expand(nn.Module):
         self.conv = DualConv(input_ch, output_ch)
     def forward(self, x1, x2):
         x1 = self.up(x1)
+        #print(x1.shape)
         #x2 is the tensor from the restriction step
-        diff = x2.size()[0] - x1.size()[0]
+        diff = x2.size()[2] - x1.size()[2]
         x1 = nn.functional.pad(
             x1, [diff // 2, diff - diff // 2]
         )
@@ -112,6 +116,8 @@ def poissontrain():
     print(f"Using {device} device")
 
     tinymodel = TinyModel().to(device)
+    UNet = OneD_UNet(1, 1).to(device)
+
 
     #generate some training data (solving a 1D discrete Poisson-type linear system)
     matrix = 2*np.eye(100) - np.eye(100, k=-1) - np.eye(100, k=1)
@@ -143,31 +149,17 @@ def poissontrain():
     validation_loader = DataLoader(validation_set, batch_size=100, shuffle=False)
 
 
-    optimizer = torch.optim.SGD(tinymodel.parameters(), lr=0.06, momentum=0.9)
-    loss_fn = torch.nn.MSELoss()
-
-
-    # start a new wandb run to track this script
-    wandb.init(
-        # set the wandb project where this run will be logged
-        project="ML_acc_solvers",
-        
-        # track hyperparameters and run metadata
-        config={
-        "learning_rate": 0.06,
-        "layers": 2,
-        "optim": "SGD",
-        "architecture": "dense",
-        "dataset": "randompoisson_100by100",
-        "epochs": 10,
-        }
-    )
-
-
     def train(dataloader, model, loss_fn, optimizer):
         size = len(dataloader.dataset)
         model.train()
         for batch, (X, y) in enumerate(dataloader):
+            if model == UNet:
+                # Reshape the data to (batch_size, channels, sequence_length)
+                X = X.unsqueeze(0)
+                X = X.view(100, 1, 100)
+                y = y.unsqueeze(0)
+                y = y.view(100, 1, 100)
+            
             X, y = X.to(device), y.to(device)
 
             # Compute prediction error
@@ -192,12 +184,40 @@ def poissontrain():
         test_loss = 0
         with torch.no_grad():
             for X, y in dataloader:
+                if model == UNet:
+                    # Reshape the data to (batch_size, channels, sequence_length)
+                    X = X.unsqueeze(0)
+                    X = X.view(100, 1, 100)
+                    y = y.unsqueeze(0)
+                    y = y.view(100, 1, 100)
                 X, y = X.to(device), y.to(device)
                 pred = model(X)
                 test_loss += loss_fn(pred, y).item()
         test_loss /= num_batches
         print(f"Test Error: Avg loss: {test_loss:>8f} \n")
         wandb.log({"Test Loss":test_loss})
+
+    '''
+    # train dense network
+    optimizer = torch.optim.SGD(tinymodel.parameters(), lr=0.06, momentum=0.9)
+    loss_fn = torch.nn.MSELoss()
+
+
+    # start a new wandb run to track this script
+    wandb.init(
+        # set the wandb project where this run will be logged
+        project="ML_acc_solvers",
+        
+        # track hyperparameters and run metadata
+        config={
+        "learning_rate": 0.06,
+        "layers": 2,
+        "optim": "SGD",
+        "architecture": "dense",
+        "dataset": "randompoisson_100by100",
+        "epochs": 10,
+        }
+    )
 
 
     epochs = 10
@@ -212,6 +232,43 @@ def poissontrain():
     print("Saved PyTorch Model State to poisson.pth")
 
     wandb.finish()
+    '''
+
+    # train U-Net
+    optimizer = torch.optim.SGD(UNet.parameters(), lr=0.06, momentum=0.9)
+    loss_fn = torch.nn.MSELoss()
+
+    
+    # start a new wandb run to track this script
+    wandb.init(
+        # set the wandb project where this run will be logged
+        project="ML_acc_solvers",
+        
+        # track hyperparameters and run metadata
+        config={
+        "learning_rate": 0.06,
+        "layers": 2,
+        "optim": "SGD",
+        "architecture": "UNet",
+        "dataset": "randompoisson_100by100",
+        "epochs": 10,
+        }
+    )
+    
+    epochs = 10
+    for t in range(epochs):
+        print(f"Epoch {t+1}\n-------------------------------")
+    
+        train(training_loader, UNet, loss_fn, optimizer)
+        test(validation_loader, UNet, loss_fn)
+        
+    print("Done!")
+
+    torch.save(UNet.state_dict(), "/Users/GUSTO/environments/firedrake/src/gusto/learning/unet_poisson.pth")
+    print("Saved PyTorch Model State to unet_poisson.pth")
+
+    #wandb.finish()
+
 
 
 def helmholtztrain():
@@ -230,7 +287,7 @@ def helmholtztrain():
     print(f"Using {device} device")
 
     tinymodel = TinyModel().to(device)
-
+    
     #generate some training data (solving a 1D discrete inhomogeneous
     # Helmholtz-type linear system).
     #The equation we set up is of the form (\nabla^2 + 1)x = b
@@ -338,5 +395,5 @@ def helmholtztrain():
 #avoid running the rest of the script when just importing ML model from elsewhere
 if __name__ == '__main__':
     poissontrain()
-    helmholtztrain()
+    #helmholtztrain()
     
