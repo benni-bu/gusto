@@ -7,6 +7,7 @@ also useful.
 """
 
 import torch
+import torch.nn as nn
 
 #define the model architecture
 class TinyModel(torch.nn.Module):
@@ -23,6 +24,76 @@ class TinyModel(torch.nn.Module):
         x = self.activation(x)
         x = self.linear2(x)
         return x
+
+#######################
+# 1D U-Net components #
+#######################
+    
+# taken partly from 
+# https://pyimagesearch.com/2023/11/06/image-segmentation-with-u-net-in-pytorch-the-grand-finale-of-the-autoencoder-series/
+
+# straight convolution block, pot. with change in depth (num of channels)
+class DualConv(nn.Module):
+    def __init__(self, input_ch, output_ch):
+        super(DualConv, self).__init__()
+        self.conv_block = nn.Sequential(
+            nn.Conv1d(input_ch, output_ch, 3, padding=1, bias=False),
+            nn.BatchNorm1d(output_ch),
+            nn.ReLU(inplace=True),
+            nn.Conv1d(output_ch, output_ch, 3, padding=1, bias=False),
+            nn.BatchNorm1d(output_ch),
+            nn.ReLU(inplace=True),
+        )
+    def forward(self, x):
+        return self.conv_block(x)
+    
+# restriction (encoding)
+class Contract(nn.Module):
+    def __init__(self, input_ch, output_ch):
+        super(Contract, self).__init__()
+        self.down_conv = nn.Sequential(nn.MaxPool1d(2), DualConv(input_ch, output_ch))
+    def forward(self, x):
+        return self.down_conv(x)
+
+# prolongation (decoding)
+class Expand(nn.Module):
+    def __init__(self, input_ch, output_ch):
+        super(Expand, self).__init__()
+        self.up = nn.ConvTranspose1d(input_ch, input_ch // 2, kernel_size=2, stride=2)
+        self.conv = DualConv(input_ch, output_ch)
+    def forward(self, x1, x2):
+        x1 = self.up(x1)
+        #x2 is the tensor from the restriction step
+        diff = x2.size()[0] - x1.size()[0]
+        x1 = nn.functional.pad(
+            x1, [diff // 2, diff - diff // 2]
+        )
+        x = torch.cat([x2, x1], dim=1)
+        return self.conv(x)
+
+#putting it together:
+class OneD_UNet(nn.Module):
+    def __init__(self, input_channels, output_channels):
+        super(OneD_UNet, self).__init__()
+        self.initial = DualConv(input_channels, 16)
+        self.down1 = Contract(16, 32)
+        self.down2 = Contract(32, 64)
+        self.down3 = Contract(64, 128)
+        self.up2 = Expand(128, 64)
+        self.up3 = Expand(64, 32)
+        self.up4 = Expand(32, 16)
+        self.final = DualConv(16, output_channels)
+    def forward(self, x):
+        x1 = self.initial(x)
+        x2 = self.down1(x1)
+        x3 = self.down2(x2)
+        x4 = self.down3(x3)
+        x = self.up2(x4, x3)
+        x = self.up3(x, x2)
+        x = self.up4(x, x1)
+        out = self.final(x)
+        return out
+
 
 
 def poissontrain():
@@ -139,6 +210,8 @@ def poissontrain():
 
     torch.save(tinymodel.state_dict(), "/Users/GUSTO/environments/firedrake/src/gusto/learning/poisson.pth")
     print("Saved PyTorch Model State to poisson.pth")
+
+    wandb.finish()
 
 
 def helmholtztrain():
@@ -258,6 +331,8 @@ def helmholtztrain():
 
     torch.save(tinymodel.state_dict(), "/Users/GUSTO/environments/firedrake/src/gusto/learning/helmholtz.pth")
     print("Saved PyTorch Model State to helmholtz.pth")
+
+    wandb.finish()
 
 
 #avoid running the rest of the script when just importing ML model from elsewhere
