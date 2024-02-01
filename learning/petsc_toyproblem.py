@@ -6,6 +6,7 @@ defined in toy_mlprecon.py
 from firedrake.petsc import PETSc
 import numpy as np
 from toy_mlprecon import (ToyMLPreconditioner, Laplace1D, Jacobi)
+import matplotlib.pyplot as plt
 
 def set_ops():
     # Set coefficients in the matrix A and RHS vector B
@@ -65,6 +66,9 @@ def solve_linear_system(A, X, B):
     A.destroy()
     X.destroy()
     B.destroy()
+
+    plt.plot(X_array)
+    plt.show()
 
 
 if __name__ == "__main__":

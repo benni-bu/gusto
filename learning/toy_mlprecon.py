@@ -8,7 +8,7 @@ from firedrake.preconditioners import PCBase
 # from firedrake.matrix_free.operators import ImplicitMatrixContext
 from firedrake.petsc import PETSc
 import torch
-from PyT_tinymodels import TinyModel
+from PyT_tinymodels import (TinyModel, OneD_UNet, smoother)
 
 OptDB = PETSc.Options()
 
@@ -85,18 +85,23 @@ class TestCtx():
 # matrix-free action of ML model. Will need this when using it as a pc.
 # this roughly follows the description on https://www.firedrakeproject.org/petsc-interface.html
 class MLCtx():
-    def __init__(self, model) -> None:
+    def __init__(self, model, smoother=None) -> None:
         #model is a loaded pytorch model including state dict.
         self.model = model
+        self.smoother = smoother
     def mult(self, mat, x, y):
         LOG('MLCtx.mult()')
         #need to convert PETSc vectors to torch tensors
         x_array = x.getArray()
         #LOG(f'PC Input vector: {x_array}')
         x_tensor = torch.tensor(x_array, dtype=torch.float32)
+        # add channel dimension to make compatible with CNNs
+        #x_tensor = x_tensor.unsqueeze(0)
         
         with torch.no_grad():
             y_tensor = self.model(x_tensor)
+            if self.smoother is not None:
+                y_tensor = self.smoother(y_tensor)
 
         #convert back to PETSc vector
         y_array = torch.Tensor.numpy(y_tensor)
@@ -155,8 +160,12 @@ class ToyMLPreconditioner(PCBase):
         print(f"Using {device} device")
 
         #load PyTorch model
+        #model = OneD_UNet(1,1).to(device)
+        #model.load_state_dict(torch.load("/Users/GUSTO/environments/firedrake/src/gusto/learning/unet_poisson.pth"))
+
         model = TinyModel().to(device)
         model.load_state_dict(torch.load("/Users/GUSTO/environments/firedrake/src/gusto/learning/poisson.pth"))
+        Smoother = smoother().to(device)
 
         #this is how P in defined in preconditioners.py as well as in the firedrake examples. But where does it get
         #the operators from? We're not passing them in when instantiating the context! - It comes from the ksp object
@@ -167,7 +176,7 @@ class ToyMLPreconditioner(PCBase):
         #this, but that's not what I want to do here.
 
         #build ML model matrix-free context
-        Pctx = MLCtx(model)
+        Pctx = MLCtx(model, Smoother)
 
         #sub in test pctx for debugging purposes
         #Pctx = TestCtx()
