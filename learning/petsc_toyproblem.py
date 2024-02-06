@@ -20,9 +20,10 @@ def set_ops():
     # Set a right-hand side vector
     X, B = A.getVecs()
     # control case: vector of ones
-    #vec_in = np.ones(100)
+    vec_in = np.ones(100)
 
     # within dynamic range of training data: superposition of sines
+    '''
     matrix = (2*np.eye(102) - np.eye(102, k=-1) - np.eye(102, k=1))*100**2
     xs = np.arange(102, step=1)
     a = 0.1 * 0.3
@@ -34,6 +35,7 @@ def set_ops():
     vec_in = np.dot(vec_out, matrix)
     vec_in = vec_in[1:-1]
     vec_out = vec_out[1:-1]
+    '''
     B.setArray(vec_in)
 
     B_array = B.getArray()
