@@ -9,6 +9,7 @@ from firedrake.preconditioners import PCBase
 from firedrake.petsc import PETSc
 import torch
 from PyT_tinymodels import (TinyModel, OneD_UNet, smoother)
+import numpy as np
 
 OptDB = PETSc.Options()
 
@@ -17,6 +18,8 @@ INFO = OptDB.hasName('info')
 def LOG(arg):
     if INFO:
         print(arg)
+
+datadir = '/Users/GUSTO/data/debug'        
 
 #--------------------------#
 # define operator contexts #
@@ -60,11 +63,18 @@ class Laplace1D(object):
         M, N = A.getSize()
         xx = x.getArray(readonly=1) # to numpy array
         yy = y.getArray(readonly=0) # to numpy array
+        # write input vec to file to check we're doing the right thing
+        if INFO:
+            with open(datadir + '/lapl_invecs.txt', 'a') as file:
+                np.savetxt(file, [xx], delimiter=',')
         yy[0]    =  2.0*xx[0] - xx[1]
         yy[1:-1] = - xx[:-2] + 2.0*xx[1:-1] - xx[2:]
         yy[-1]   = - xx[-2] + 2.0*xx[-1]
         h = 1.0/(M-1)
         yy *= 1.0/h**2
+        if INFO:
+            with open(datadir + '/lapl_outvecs.txt', 'a') as file:
+                np.savetxt(file, [yy], delimiter=',')
 
     def multTranspose(self, A, x, y):
         LOG('Laplace1D.multTranspose()')
@@ -93,6 +103,11 @@ class MLCtx():
         LOG('MLCtx.mult()')
         #need to convert PETSc vectors to torch tensors
         x_array = x.getArray()
+
+        if INFO:
+            with open(datadir + '/ml_invecs.txt', 'a') as file:
+                np.savetxt(file, [x_array], delimiter=',')
+
         #LOG(f'PC Input vector: {x_array}')
         x_tensor = torch.tensor(x_array, dtype=torch.float32)
         # add channel dimension to make compatible with CNNs
@@ -105,6 +120,10 @@ class MLCtx():
 
         #convert back to PETSc vector
         y_array = torch.Tensor.numpy(y_tensor)
+
+        if INFO:
+            with open(datadir + '/ml_outvecs.txt', 'a') as file:
+                np.savetxt(file, [y_array], delimiter=',')
         #LOG(f'PC Output vector: {y_array}')
         y.setArray(y_array)
 
