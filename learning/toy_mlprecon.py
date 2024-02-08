@@ -19,7 +19,8 @@ def LOG(arg):
     if INFO:
         print(arg)
 
-datadir = '/Users/GUSTO/data/debug'        
+datadir = '/Users/GUSTO/data/debug'  
+exp = '/jacobi'      
 
 #--------------------------#
 # define operator contexts #
@@ -65,7 +66,7 @@ class Laplace1D(object):
         yy = y.getArray(readonly=0) # to numpy array
         # write input vec to file to check we're doing the right thing
         if INFO:
-            with open(datadir + '/lapl_invecs.txt', 'a') as file:
+            with open(datadir + exp + '/lapl_invecs.txt', 'a') as file:
                 np.savetxt(file, [xx], delimiter=',')
         yy[0]    =  2.0*xx[0] - xx[1]
         yy[1:-1] = - xx[:-2] + 2.0*xx[1:-1] - xx[2:]
@@ -73,7 +74,7 @@ class Laplace1D(object):
         h = 1.0/(M-1)
         yy *= 1.0/h**2
         if INFO:
-            with open(datadir + '/lapl_outvecs.txt', 'a') as file:
+            with open(datadir + exp + '/lapl_outvecs.txt', 'a') as file:
                 np.savetxt(file, [yy], delimiter=',')
 
     def multTranspose(self, A, x, y):
@@ -105,7 +106,7 @@ class MLCtx():
         x_array = x.getArray()
 
         if INFO:
-            with open(datadir + '/ml_invecs.txt', 'a') as file:
+            with open(datadir + exp + '/ml_invecs.txt', 'a') as file:
                 np.savetxt(file, [x_array], delimiter=',')
 
         #LOG(f'PC Input vector: {x_array}')
@@ -122,7 +123,7 @@ class MLCtx():
         y_array = torch.Tensor.numpy(y_tensor)
 
         if INFO:
-            with open(datadir + '/ml_outvecs.txt', 'a') as file:
+            with open(datadir + exp + '/ml_outvecs.txt', 'a') as file:
                 np.savetxt(file, [y_array], delimiter=',')
         #LOG(f'PC Output vector: {y_array}')
         y.setArray(y_array)
@@ -158,7 +159,15 @@ class Jacobi(object):
 
     def apply(self, pc, x, y):
         LOG('Jacobi.apply()')
+        if INFO:
+            x_array = x.getArray()
+            with open(datadir + exp + '/jac_invecs.txt', 'a') as file:
+                np.savetxt(file, [x_array], delimiter=',')
         y.pointwiseDivide(x, self.diag)
+        if INFO:
+            y_array = y.getArray()
+            with open(datadir + exp + '/jac_outvecs.txt', 'a') as file:
+                np.savetxt(file, [y_array], delimiter=',')
 
     def applyTranspose(self, pc, x, y):
         LOG('Jacobi.applyTranspose()')

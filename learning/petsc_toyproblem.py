@@ -60,8 +60,8 @@ def solve_linear_system(A, X, B):
     #pc.setType(PETSc.PC.Type.NONE) #for reference runs without pc
     #pc.setType(PETSc.PC.Type.SOR)  #for reference runs with SOR
     pc.setType(PETSc.PC.Type.PYTHON)
-    pc.setPythonContext(ToyMLPreconditioner())
-    #pc.setPythonContext(Jacobi())
+    #pc.setPythonContext(ToyMLPreconditioner())
+    pc.setPythonContext(Jacobi())
 
     ksp.solve(B, X)
 
