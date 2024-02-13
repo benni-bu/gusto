@@ -11,11 +11,14 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-#define the model architecture
-class TinyModel(nn.Module):
+###########################
+# Dense, one hidden Layer #
+###########################
+
+class Dense(nn.Module):
 
     def __init__(self):
-        super(TinyModel, self).__init__()
+        super(Dense, self).__init__()
 
         self.linear1 = nn.Linear(100, 200)
         self.activation = nn.ELU()
@@ -42,6 +45,20 @@ class smoother(nn.Module):
         output = F.conv1d(output, self.sm_kernel.view(1, 1, -1), padding=4)
         output = output.squeeze()
         return output
+    
+#####################
+# linear regression #
+#####################
+class LinReg(nn.Module):
+
+    def __init__(self):
+        super(LinReg, self).__init__()
+        self.linear = nn.Linear(100, 100)
+
+    def forward(self, x):
+        x = self.linear(x)
+        return x
+
 
 #######################
 # 1D U-Net components #
@@ -142,7 +159,10 @@ class OneD_UNet(nn.Module):
         return out
 
 
-
+############
+# training #
+############
+    
 def poissontrain():
     from torch.utils.data import DataLoader, TensorDataset, random_split
     import wandb
@@ -158,8 +178,9 @@ def poissontrain():
     )
     print(f"Using {device} device")
 
-    tinymodel = TinyModel().to(device)
+    dense = Dense().to(device)
     UNet = OneD_UNet(1, 1).to(device)
+    linreg = LinReg().to(device)
 
 
     #generate some training data (solving a 1D discrete Poisson-type linear system)
@@ -179,8 +200,16 @@ def poissontrain():
     vec_out = np.zeros((1000, 102))
     for i in np.arange(1000):
         vec_out[i] = (a[i] * np.sin(np.pi/100 * xs) + b[i] * np.sin(np.pi/100 * 2 * xs) + 
-                c[i] * np.sin(np.pi/100 * 3 * xs) + d[i] * np.sin(np.pi/100 * 4 * xs))
+                  c[i] * np.sin(np.pi/100 * 3 * xs) + d[i] * np.sin(np.pi/100 * 4 * xs))
+
+    #random x vectors (not recommended, doesn't train well):
     #vec_out = np.random.rand(1000, 100)
+        
+    #large set ot vectors of ones as a sanity check (create 'perfect preconditioner' for this particular problem)
+    #for i in np.arange(1000):
+    #    vec_out[i] = (- xs **2 + 100*xs)*0.00005
+
+    #compute RHS based on x vector
     vec_in = np.dot(vec_out, matrix)
 
     #cut off boundaries because they seem to behave weirdly (bcs not properly specified)
@@ -255,9 +284,47 @@ def poissontrain():
         print(f"Test Error: Avg loss: {test_loss:>8f} \n")
         wandb.log({"Test Loss":test_loss})
 
+    '''
+    #train linear regression model
+    optimizer = torch.optim.SGD(linreg.parameters(), lr=0.06, momentum=0.9)
+    loss_fn = torch.nn.MSELoss()
+
+    # start a new wandb run to track this script
+    wandb.init(
+        # set the wandb project where this run will be logged
+        project="ML_acc_solvers",
+        name= "linreg_ones-poisson_100by100",
+        
+        # track hyperparameters and run metadata
+        config={
+        "learning_rate": 0.06,
+        "layers": 0,
+        "optim": "SGD",
+        "architecture": "dense",
+        "dataset": "ones_poisson_100by100",
+        "epochs": 10,
+        "activation": "linear"
+        }
+    )
+
+
+    epochs = 10
+    for t in range(epochs):
+        print(f"Epoch {t+1}\n-------------------------------")
+        train(training_loader, linreg, loss_fn, optimizer)
+        test(validation_loader, linreg, loss_fn)
+        
+    print("Done!")
+
+    torch.save(linreg.state_dict(), "/Users/GUSTO/environments/firedrake/src/gusto/learning/lin_poisson.pth")
+    print("Saved PyTorch Model State to lin_poisson.pth")
+
+    wandb.finish()
     
+    
+    '''
     # train dense network
-    optimizer = torch.optim.SGD(tinymodel.parameters(), lr=0.06, momentum=0.9)
+    optimizer = torch.optim.SGD(dense.parameters(), lr=0.06, momentum=0.9)
     loss_fn = torch.nn.MSELoss()
 
 
@@ -265,7 +332,7 @@ def poissontrain():
     wandb.init(
         # set the wandb project where this run will be logged
         project="ML_acc_solvers",
-        name= "dense_sm-poisson_100by100",
+        name= "dense_sm-poisson_100by100_2",
         
         # track hyperparameters and run metadata
         config={
@@ -283,12 +350,12 @@ def poissontrain():
     epochs = 10
     for t in range(epochs):
         print(f"Epoch {t+1}\n-------------------------------")
-        train(training_loader, tinymodel, loss_fn, optimizer)
-        test(validation_loader, tinymodel, loss_fn)
+        train(training_loader, dense, loss_fn, optimizer)
+        test(validation_loader, dense, loss_fn)
         
     print("Done!")
 
-    torch.save(tinymodel.state_dict(), "/Users/GUSTO/environments/firedrake/src/gusto/learning/poisson.pth")
+    torch.save(dense.state_dict(), "/Users/GUSTO/environments/firedrake/src/gusto/learning/poisson.pth")
     print("Saved PyTorch Model State to poisson.pth")
 
     wandb.finish()
@@ -347,7 +414,7 @@ def helmholtztrain():
     )
     print(f"Using {device} device")
 
-    tinymodel = TinyModel().to(device)
+    dense = Dense().to(device)
     
     #generate some training data (solving a 1D discrete inhomogeneous
     # Helmholtz-type linear system).
@@ -382,7 +449,7 @@ def helmholtztrain():
     validation_loader = DataLoader(validation_set, batch_size=100, shuffle=False)
 
 
-    optimizer = torch.optim.SGD(tinymodel.parameters(), lr=0.06, momentum=0.9)
+    optimizer = torch.optim.SGD(dense.parameters(), lr=0.06, momentum=0.9)
     loss_fn = torch.nn.MSELoss()
 
 
@@ -442,12 +509,12 @@ def helmholtztrain():
     epochs = 10
     for t in range(epochs):
         print(f"Epoch {t+1}\n-------------------------------")
-        train(training_loader, tinymodel, loss_fn, optimizer)
-        test(validation_loader, tinymodel, loss_fn)
+        train(training_loader, dense, loss_fn, optimizer)
+        test(validation_loader, dense, loss_fn)
         
     print("Done!")
 
-    torch.save(tinymodel.state_dict(), "/Users/GUSTO/environments/firedrake/src/gusto/learning/helmholtz.pth")
+    torch.save(dense.state_dict(), "/Users/GUSTO/environments/firedrake/src/gusto/learning/helmholtz.pth")
     print("Saved PyTorch Model State to helmholtz.pth")
 
     wandb.finish()

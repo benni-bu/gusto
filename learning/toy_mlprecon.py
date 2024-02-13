@@ -8,8 +8,9 @@ from firedrake.preconditioners import PCBase
 # from firedrake.matrix_free.operators import ImplicitMatrixContext
 from firedrake.petsc import PETSc
 import torch
-from PyT_tinymodels import (TinyModel, OneD_UNet, smoother)
+from PyT_tinymodels import (Dense, OneD_UNet, LinReg, smoother)
 import numpy as np
+import os
 
 OptDB = PETSc.Options()
 
@@ -19,8 +20,27 @@ def LOG(arg):
     if INFO:
         print(arg)
 
+# set up outputting of solve vectors for debugging purposes
 datadir = '/Users/GUSTO/data/debug'  
-exp = '/jacobi'      
+exp = '/ml_dense' 
+
+lapl_in_path = datadir + exp + '/lapl_invecs.txt'
+lapl_out_path = datadir + exp + '/lapl_outvecs.txt'
+precon_in_path = datadir + exp + '/prec_invecs.txt'
+precon_out_path = datadir + exp + '/prec_outvecs.txt'
+
+if os.path.exists(lapl_in_path):
+    # If the file exists, delete its contents
+    open(lapl_in_path, 'w').close()  # This truncates the file
+
+if os.path.exists(lapl_out_path):
+    open(lapl_out_path, 'w').close()
+
+if os.path.exists(precon_in_path):
+    open(precon_in_path, 'w').close()
+
+if os.path.exists(precon_out_path):
+    open(precon_out_path, 'w').close()
 
 #--------------------------#
 # define operator contexts #
@@ -106,7 +126,7 @@ class MLCtx():
         x_array = x.getArray()
 
         if INFO:
-            with open(datadir + exp + '/ml_invecs.txt', 'a') as file:
+            with open(datadir + exp + '/prec_invecs.txt', 'a') as file:
                 np.savetxt(file, [x_array], delimiter=',')
 
         #LOG(f'PC Input vector: {x_array}')
@@ -123,7 +143,7 @@ class MLCtx():
         y_array = torch.Tensor.numpy(y_tensor)
 
         if INFO:
-            with open(datadir + exp + '/ml_outvecs.txt', 'a') as file:
+            with open(datadir + exp + '/prec_outvecs.txt', 'a') as file:
                 np.savetxt(file, [y_array], delimiter=',')
         #LOG(f'PC Output vector: {y_array}')
         y.setArray(y_array)
@@ -161,12 +181,12 @@ class Jacobi(object):
         LOG('Jacobi.apply()')
         if INFO:
             x_array = x.getArray()
-            with open(datadir + exp + '/jac_invecs.txt', 'a') as file:
+            with open(datadir + exp + '/prec_invecs.txt', 'a') as file:
                 np.savetxt(file, [x_array], delimiter=',')
         y.pointwiseDivide(x, self.diag)
         if INFO:
             y_array = y.getArray()
-            with open(datadir + exp + '/jac_outvecs.txt', 'a') as file:
+            with open(datadir + exp + '/prec_outvecs.txt', 'a') as file:
                 np.savetxt(file, [y_array], delimiter=',')
 
     def applyTranspose(self, pc, x, y):
@@ -191,8 +211,12 @@ class ToyMLPreconditioner(PCBase):
         #model = OneD_UNet(1,1).to(device)
         #model.load_state_dict(torch.load("/Users/GUSTO/environments/firedrake/src/gusto/learning/unet_poisson.pth"))
 
-        model = TinyModel().to(device)
+        model = Dense().to(device)
         model.load_state_dict(torch.load("/Users/GUSTO/environments/firedrake/src/gusto/learning/poisson.pth"))
+
+        #model = LinReg().to(device)
+        #model.load_state_dict(torch.load("/Users/GUSTO/environments/firedrake/src/gusto/learning/lin_poisson.pth"))
+
         Smoother = smoother().to(device)
 
         #this is how P in defined in preconditioners.py as well as in the firedrake examples. But where does it get
