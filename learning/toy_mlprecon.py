@@ -22,7 +22,7 @@ def LOG(arg):
 
 # set up outputting of solve vectors for debugging purposes
 datadir = '/Users/GUSTO/data/debug'  
-exp = '/ml_dense' 
+exp = '/jac_restart100' 
 
 lapl_in_path = datadir + exp + '/lapl_invecs.txt'
 lapl_out_path = datadir + exp + '/lapl_outvecs.txt'

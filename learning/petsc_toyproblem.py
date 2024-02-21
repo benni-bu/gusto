@@ -48,10 +48,12 @@ def solve_linear_system(A, X, B):
     ksp = PETSc.KSP().create()
     ksp.setType(PETSc.KSP.Type.GCR)
     ksp.setTolerances(rtol=1e-5)
+    #ksp.gcrSetRestart(100)
     #ksp.setTolerances(max_it=40)
 
     # Set the operator (coefficient matrix) for the linear solver
     ksp.setOperators(A)
+    ksp.setFromOptions()
 
     #define the pc so PETSc knows what to do when instantiating the ML context
     pc = ksp.getPC()
@@ -60,8 +62,8 @@ def solve_linear_system(A, X, B):
     #pc.setType(PETSc.PC.Type.NONE) #for reference runs without pc
     #pc.setType(PETSc.PC.Type.SOR)  #for reference runs with SOR
     pc.setType(PETSc.PC.Type.PYTHON)
-    pc.setPythonContext(ToyMLPreconditioner())
-    #pc.setPythonContext(Jacobi())
+    #pc.setPythonContext(ToyMLPreconditioner())
+    pc.setPythonContext(Jacobi())
 
     ksp.solve(B, X)
 
