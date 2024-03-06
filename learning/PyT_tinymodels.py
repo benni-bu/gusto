@@ -185,8 +185,8 @@ def poissontrain():
 
     #generate some training data (solving a 1D discrete Poisson-type linear system)
     matrix = (2*np.eye(102) - np.eye(102, k=-1) - np.eye(102, k=1))*100**2
-    plt.imshow(matrix)
-    plt.show()
+    #plt.imshow(matrix)
+    #plt.show()
     #generate 1000 vectors of size 100, multiply them with matrix to get RHS vectors.
     #We want our network to learn the mapping from the RHS vector to the LHS vector
     #in a system Ax=b. Here, x:=vec_out, b:=vec_in
@@ -284,6 +284,22 @@ def poissontrain():
         print(f"Test Error: Avg loss: {test_loss:>8f} \n")
         wandb.log({"Test Loss":test_loss})
 
+    #define a new loss function that also measures how far off the operator times 
+    # the output is - this should better reflect what happens with the model 
+    # output within the solver
+    class MSEplusOpLoss(nn.Module):
+        def __init__(self, op):
+            super(MSEplusOpLoss, self).__init__()
+            self.op = torch.Tensor(op)
+            self.op.unsqueeze(0)
+        def forward(self, input, target):
+            mse = torch.nn.MSELoss()
+            MSE = mse(input, target)
+            Ap = torch.matmul(self.op, input)
+            Ax = torch.matmul(self.op, target)
+            OpNorm = mse(Ap, Ax) * 1e-7
+            return MSE + OpNorm
+
     '''
     #train linear regression model
     optimizer = torch.optim.SGD(linreg.parameters(), lr=0.06, momentum=0.9)
@@ -324,25 +340,27 @@ def poissontrain():
     
     '''
     # train dense network
-    optimizer = torch.optim.SGD(dense.parameters(), lr=0.06, momentum=0.9)
-    loss_fn = torch.nn.MSELoss()
+    optimizer = torch.optim.SGD(dense.parameters(), lr=6e-2, momentum=0.9)
+    matrix = (2*np.eye(100) - np.eye(100, k=-1) - np.eye(100, k=1))*100**2
+    loss_fn = MSEplusOpLoss(matrix)
 
 
     # start a new wandb run to track this script
     wandb.init(
         # set the wandb project where this run will be logged
         project="ML_acc_solvers",
-        name= "dense_sm-poisson_100by100_2",
+        name= "dense_sm_MSE_self-poisson_100by100",
         
         # track hyperparameters and run metadata
         config={
-        "learning_rate": 0.06,
+        "learning_rate": 6e-2,
         "layers": 2,
         "optim": "SGD",
         "architecture": "dense",
         "dataset": "smoothpoisson_100by100",
         "epochs": 10,
-        "activation": "ELU"
+        "activation": "ELU",
+        "loss": "MSEplusOpLoss"
         }
     )
 

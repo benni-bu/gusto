@@ -2,6 +2,8 @@
 This code sets up the matrix-free operator contexts and the preconditioners 
 used in the example ML preconditioning problem. The ML preconditioner is set
 up using firedrake's PCBase class. 
+Finally, it also includes an implementation of GCR mirroring that used in MO 
+models.
 """
 
 from firedrake.preconditioners import PCBase
@@ -265,4 +267,95 @@ class ToyMLPreconditioner(PCBase):
         prefix += "toy_mlprecon_"
         pc.setOptionsPrefix(prefix)
         super().update(pc)
-            
+
+
+
+#-------------------#
+# define GCR solver #
+#-------------------#
+
+class GCR(object):
+
+    def create(self, ksp):
+        LOG('GCR.create()')
+        self.work = []
+
+    def destroy(self, ksp):
+        LOG('GCR.destroy()')
+        for vec in self.work:
+            if vec:
+                vec.destroy()
+        self.work = []
+
+    def view(self, ksp, viewer):
+        LOG('GCR.view()')
+
+    def setUp(self, ksp):
+        LOG('GCR.setUp()')
+        self.work[:] = ksp.getWorkVecs(right=3, left=None)
+        self.vv = np.zeros((200,100))
+        self.ppvv = np.zeros((200,100))
+
+    def solve(self, ksp, b, x):
+        LOG('GCR.solve()')
+        A, P = get_op_pc(ksp, transpose=False)
+        self.pgcr(ksp, A, P, b, x, *self.work)
+
+    def solveTranspose(self, ksp, b, x):
+        LOG('GCR.solveTranspose()')
+        A, P = get_op_pc(ksp, transpose=True)
+        self.pgcr(ksp, A, P, b, x, *self.work)
+
+    def do_loop(self, ksp, r):
+        its = ksp.getIterationNumber()
+        rnorm = r.norm()
+        ksp.setResidualNorm(rnorm)
+        ksp.logConvergenceHistory(rnorm)
+        ksp.monitor(its, rnorm)
+        reason = ksp.callConvergenceTest(its, rnorm)
+        if not reason:
+            ksp.setIterationNumber(its+1)
+            #hard-wire maximum nuber of iterations to 200
+            #if its == 199:
+            #    reason = True
+        else:
+            ksp.setConvergedReason(reason)
+        return reason
+
+    def pgcr(self, ksp, A, P, b, x, r, pv, v):
+        A(x, r)
+        r.aypx(-1, b)
+        #P(r, z)
+        #delta = r.dot(z)
+        #z.copy(p)
+        while not self.do_loop(ksp, r):
+            P(r, pv)
+            A(pv, v)
+            iv = ksp.getIterationNumber()
+            self.vv[iv-1] = v.getArray()
+            self.ppvv[iv-1] = pv.getArray()
+            for ivj in range(iv):
+                alpha = self.vv[iv-1].dot(self.vv[ivj])
+                self.vv[iv-1] += -alpha * self.vv[ivj]
+                self.ppvv[iv-1] += -alpha * pv[ivj]
+            v.setArray(self.vv[iv-1])
+            pv.setArray(self.ppvv[iv-1])
+            alpha = v.norm()
+            beta = 1.0 / alpha
+            v.scale(beta)
+            pv.scale(beta)
+            alpha = r.dot(v)
+            x.axpy(alpha, pv)
+            r.axpy(-alpha, v)
+            #rs[iv] = r
+
+def get_op_pc(ksp, transpose=False):
+        op, _ = ksp.getOperators()
+        pc = ksp.getPC()
+        if not transpose:
+            A = op.mult
+            P = pc.apply
+        else:
+            A = op.multTranspose
+            P = pc.applyTranspose
+        return A, P

@@ -5,7 +5,7 @@ defined in toy_mlprecon.py
 
 from firedrake.petsc import PETSc
 import numpy as np
-from toy_mlprecon import (ToyMLPreconditioner, Laplace1D, Jacobi)
+from toy_mlprecon import (ToyMLPreconditioner, Laplace1D, Jacobi, GCR)
 import matplotlib.pyplot as plt
 
 def set_ops():
@@ -45,25 +45,28 @@ def set_ops():
 
 def solve_linear_system(A, X, B):
     # Create a linear solver context
-    ksp = PETSc.KSP().create()
-    ksp.setType(PETSc.KSP.Type.GCR)
+    ksp = PETSc.KSP()
+    ksp.create(comm=PETSc.COMM_WORLD)
+    ksp.setType(PETSc.KSP.Type.PYTHON)
+    ksp.setPythonContext(GCR())
+    #ksp.setType(PETSc.KSP.Type.GCR)
     ksp.setTolerances(rtol=1e-5)
     #ksp.gcrSetRestart(100)
-    #ksp.setTolerances(max_it=40)
+    ksp.setTolerances(max_it=150)
 
     # Set the operator (coefficient matrix) for the linear solver
-    ksp.setOperators(A)
+    ksp.setOperators(A, A)
     ksp.setFromOptions()
 
     #define the pc so PETSc knows what to do when instantiating the ML context
     pc = ksp.getPC()
 
     # Set the preconditioner for the linear solver
-    #pc.setType(PETSc.PC.Type.NONE) #for reference runs without pc
+    pc.setType(PETSc.PC.Type.NONE) #for reference runs without pc
     #pc.setType(PETSc.PC.Type.SOR)  #for reference runs with SOR
-    pc.setType(PETSc.PC.Type.PYTHON)
+    #pc.setType(PETSc.PC.Type.PYTHON)
     #pc.setPythonContext(ToyMLPreconditioner())
-    pc.setPythonContext(Jacobi())
+    #pc.setPythonContext(Jacobi())
 
     ksp.solve(B, X)
 
