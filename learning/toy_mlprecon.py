@@ -24,7 +24,7 @@ def LOG(arg):
 
 # set up outputting of solve vectors for debugging purposes
 datadir = '/Users/GUSTO/data/debug'  
-exp = '/jac_restart100' 
+exp = '/mygcr_init' 
 
 lapl_in_path = datadir + exp + '/lapl_invecs.txt'
 lapl_out_path = datadir + exp + '/lapl_outvecs.txt'
@@ -78,7 +78,7 @@ class Laplace1D(object):
     def getDiagonal(self, A, d):
         LOG('Laplace1D.getDiagonal()')
         M, N = A.getSize()
-        h = 1.0/(M-1)
+        h = 1.0/(M+1)
         d.set(2.0/h**2)
 
     def mult(self, A, x, y):
@@ -332,14 +332,18 @@ class GCR(object):
             P(r, pv)
             A(pv, v)
             iv = ksp.getIterationNumber()
-            self.vv[iv-1] = v.getArray()
-            self.ppvv[iv-1] = pv.getArray()
+            #make iv zero-indexed to match python
+            iv += -1
+            print(iv)
+            self.vv[iv] = v.getArray()
+            self.ppvv[iv] = pv.getArray()
             for ivj in range(iv):
-                alpha = self.vv[iv-1].dot(self.vv[ivj])
-                self.vv[iv-1] += -alpha * self.vv[ivj]
-                self.ppvv[iv-1] += -alpha * pv[ivj]
-            v.setArray(self.vv[iv-1])
-            pv.setArray(self.ppvv[iv-1])
+                alpha = self.vv[iv].dot(self.vv[ivj])
+                print(alpha)
+                self.vv[iv] += -alpha * self.vv[ivj]
+                self.ppvv[iv] += -alpha * pv[ivj]
+            v.setArray(self.vv[iv])
+            pv.setArray(self.ppvv[iv])
             alpha = v.norm()
             beta = 1.0 / alpha
             v.scale(beta)

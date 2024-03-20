@@ -10,6 +10,7 @@ also useful.
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+#from sklearn.preprocessing import MinMaxScaler
 
 ###########################
 # Dense, one hidden Layer #
@@ -49,6 +50,8 @@ class smoother(nn.Module):
 #####################
 # linear regression #
 #####################
+    
+#once as a fully connected network
 class LinReg(nn.Module):
 
     def __init__(self):
@@ -57,6 +60,18 @@ class LinReg(nn.Module):
 
     def forward(self, x):
         x = self.linear(x)
+        return x
+    
+
+# and once as a linear convolution (essentially Ackmann et al.)
+class LinConv(nn.Module):
+
+    def __init__(self):
+        super(LinConv, self).__init__()
+        self.conv = nn.Conv1d(1,1,kernel_size=5,stride=1,padding=2)
+
+    def forward(self, x):
+        x = self.conv(x)
         return x
 
 
@@ -159,11 +174,15 @@ class OneD_UNet(nn.Module):
         return out
 
 
-############
-# training #
-############
+#---------------------------------------------------------------------------------------------------#
+
+                                            ############
+                                            # training #
+                                            ############
     
-def poissontrain():
+#---------------------------------------------------------------------------------------------------#
+
+if __name__ == '__main__':
     from torch.utils.data import DataLoader, TensorDataset, random_split
     import wandb
     import numpy as np
@@ -181,27 +200,95 @@ def poissontrain():
     dense = Dense().to(device)
     UNet = OneD_UNet(1, 1).to(device)
     linreg = LinReg().to(device)
+    linconv = LinConv().to(device)    
 
 
+def train(dataloader, model, loss_fn, optimizer):
+    size = len(dataloader.dataset)
+    model.train()
+    for batch, (X, y) in enumerate(dataloader):
+        if model == UNet or model == linconv:
+            # Reshape the data to (batch_size, channels, sequence_length)
+            X = X.unsqueeze(0)
+            X = X.view(100, 1, 100)
+            y = y.unsqueeze(0)
+            y = y.view(100, 1, 100)
+        
+        X, y = X.to(device), y.to(device)
+
+        # Compute prediction error
+        pred = model(X)
+        loss = loss_fn(pred, y)
+
+        # Backpropagation
+        loss.backward()
+        optimizer.step()
+        optimizer.zero_grad()
+
+        if batch % 10 == 0:
+            loss, current = loss.item(), (batch + 1) * len(X)
+            print(f"loss: {loss:>7f}  [{current:>5d}/{size:>5d}]")
+            
+        wandb.log({"Training Loss":loss})
+
+
+def test(dataloader, model, loss_fn):
+    num_batches = len(dataloader)
+    model.eval()
+    test_loss = 0
+    with torch.no_grad():
+        for X, y in dataloader:
+            if model == UNet or model ==linconv:
+                # Reshape the data to (batch_size, channels, sequence_length)
+                X = X.unsqueeze(0)
+                X = X.view(100, 1, 100)
+                y = y.unsqueeze(0)
+                y = y.view(100, 1, 100)
+            X, y = X.to(device), y.to(device)
+            pred = model(X)
+            test_loss += loss_fn(pred, y).item()
+    test_loss /= num_batches
+    print(f"Test Error: Avg loss: {test_loss:>8f} \n")
+    wandb.log({"Test Loss":test_loss})
+
+#define a new loss function that also measures how far off the operator times 
+# the output is - this should better reflect what happens with the model 
+# output within the solver
+class MSEplusOpLoss(nn.Module):
+    def __init__(self, op):
+        super(MSEplusOpLoss, self).__init__()
+        self.op = torch.Tensor(op)
+        self.op.unsqueeze(0)
+    def forward(self, input, target):
+        mse = torch.nn.MSELoss()
+        MSE = mse(input, target)
+        Ap = torch.matmul(self.op, input)
+        Ax = torch.matmul(self.op, target)
+        OpNorm = mse(Ap, Ax) * 1e-7
+        return MSE + OpNorm
+
+
+    
+def poissontrain():
     #generate some training data (solving a 1D discrete Poisson-type linear system)
-    matrix = (2*np.eye(102) - np.eye(102, k=-1) - np.eye(102, k=1))*100**2
+    matrix = (2*np.eye(102) - np.eye(102, k=-1) - np.eye(102, k=1))*101**2
     #plt.imshow(matrix)
     #plt.show()
+
     #generate 1000 vectors of size 100, multiply them with matrix to get RHS vectors.
     #We want our network to learn the mapping from the RHS vector to the LHS vector
     #in a system Ax=b. Here, x:=vec_out, b:=vec_in
     #generate x vectors that are smooth and fixed to zero at the boundaries 
     #to maintain physicality and allow the network to learn.
     xs = np.arange(102, step=1)
-    a = 0.1 * np.random.randn(1000)
-    b = 0.05 * np.random.randn(1000)
-    c = 0.03 * np.random.randn(1000)
-    d = 0.03 * np.random.randn(1000)
-    vec_out = np.zeros((1000, 102))
-    for i in np.arange(1000):
+    a = 0.1 * np.random.randn(10000)
+    b = 0.05 * np.random.randn(10000)
+    c = 0.03 * np.random.randn(10000)
+    d = 0.03 * np.random.randn(10000)
+    vec_out = np.zeros((10000, 102))
+    for i in np.arange(10000):
         vec_out[i] = (a[i] * np.sin(np.pi/100 * xs) + b[i] * np.sin(np.pi/100 * 2 * xs) + 
-                  c[i] * np.sin(np.pi/100 * 3 * xs) + d[i] * np.sin(np.pi/100 * 4 * xs))
-
+                c[i] * np.sin(np.pi/100 * 3 * xs) + d[i] * np.sin(np.pi/100 * 4 * xs))
     #random x vectors (not recommended, doesn't train well):
     #vec_out = np.random.rand(1000, 100)
         
@@ -215,6 +302,11 @@ def poissontrain():
     #cut off boundaries because they seem to behave weirdly (bcs not properly specified)
     vec_in = vec_in[:, 1:-1]
     vec_out = vec_out[:, 1:-1]
+
+    #scale by infty-norm of input to make model scale invariant
+    norm = np.linalg.norm(vec_in, ord=np.inf, axis = 1, keepdims = True)
+    vec_in *= 1/norm
+    vec_out *= 1/norm
 
     # Convert data to PyTorch tensors
     input_tensors = torch.tensor(vec_in, dtype=torch.float32)
@@ -230,101 +322,34 @@ def poissontrain():
     # Use random_split to create training and test sets
     training_set, validation_set = random_split(dataset, [train_size, validation_size])
 
-
     # Create data loaders for our datasets; shuffle for training, not for validation
     training_loader = DataLoader(training_set, batch_size=100, shuffle=True)
     validation_loader = DataLoader(validation_set, batch_size=100, shuffle=False)
-
-
-    def train(dataloader, model, loss_fn, optimizer):
-        size = len(dataloader.dataset)
-        model.train()
-        for batch, (X, y) in enumerate(dataloader):
-            if model == UNet:
-                # Reshape the data to (batch_size, channels, sequence_length)
-                X = X.unsqueeze(0)
-                X = X.view(100, 1, 100)
-                y = y.unsqueeze(0)
-                y = y.view(100, 1, 100)
-            
-            X, y = X.to(device), y.to(device)
-
-            # Compute prediction error
-            pred = model(X)
-            loss = loss_fn(pred, y)
-
-            # Backpropagation
-            loss.backward()
-            optimizer.step()
-            optimizer.zero_grad()
-
-            if batch % 100 == 0:
-                loss, current = loss.item(), (batch + 1) * len(X)
-                print(f"loss: {loss:>7f}  [{current:>5d}/{size:>5d}]")
-            
-            wandb.log({"Training Loss":loss})
-
-
-    def test(dataloader, model, loss_fn):
-        num_batches = len(dataloader)
-        model.eval()
-        test_loss = 0
-        with torch.no_grad():
-            for X, y in dataloader:
-                if model == UNet:
-                    # Reshape the data to (batch_size, channels, sequence_length)
-                    X = X.unsqueeze(0)
-                    X = X.view(100, 1, 100)
-                    y = y.unsqueeze(0)
-                    y = y.view(100, 1, 100)
-                X, y = X.to(device), y.to(device)
-                pred = model(X)
-                test_loss += loss_fn(pred, y).item()
-        test_loss /= num_batches
-        print(f"Test Error: Avg loss: {test_loss:>8f} \n")
-        wandb.log({"Test Loss":test_loss})
-
-    #define a new loss function that also measures how far off the operator times 
-    # the output is - this should better reflect what happens with the model 
-    # output within the solver
-    class MSEplusOpLoss(nn.Module):
-        def __init__(self, op):
-            super(MSEplusOpLoss, self).__init__()
-            self.op = torch.Tensor(op)
-            self.op.unsqueeze(0)
-        def forward(self, input, target):
-            mse = torch.nn.MSELoss()
-            MSE = mse(input, target)
-            Ap = torch.matmul(self.op, input)
-            Ax = torch.matmul(self.op, target)
-            OpNorm = mse(Ap, Ax) * 1e-7
-            return MSE + OpNorm
-
-    '''
+    
     #train linear regression model
-    optimizer = torch.optim.SGD(linreg.parameters(), lr=0.06, momentum=0.9)
+    optimizer = torch.optim.Adam(linreg.parameters(), lr=1e-3)
     loss_fn = torch.nn.MSELoss()
 
     # start a new wandb run to track this script
     wandb.init(
         # set the wandb project where this run will be logged
         project="ML_acc_solvers",
-        name= "linreg_ones-poisson_100by100",
+        name= "linreg_sm-poisson_inf_100by100",
         
         # track hyperparameters and run metadata
         config={
-        "learning_rate": 0.06,
+        "learning_rate": 1e-3,
         "layers": 0,
-        "optim": "SGD",
+        "optim": "Adam",
         "architecture": "dense",
-        "dataset": "ones_poisson_100by100",
-        "epochs": 10,
+        "dataset": "smooth_poisson_100by100",
+        "epochs": 8,
         "activation": "linear"
         }
     )
 
 
-    epochs = 10
+    epochs = 8
     for t in range(epochs):
         print(f"Epoch {t+1}\n-------------------------------")
         train(training_loader, linreg, loss_fn, optimizer)
@@ -338,34 +363,72 @@ def poissontrain():
     wandb.finish()
     
     
-    '''
+    #train linear convolution model
+    optimizer = torch.optim.Adam(linconv.parameters(), lr=1e-3)
+    loss_fn = torch.nn.MSELoss()
+
+    # start a new wandb run to track this script
+    wandb.init(
+        # set the wandb project where this run will be logged
+        project="ML_acc_solvers",
+        name= "linconv_sm-poisson_inf_100by100",
+        
+        # track hyperparameters and run metadata
+        config={
+        "learning_rate": 1e-3,
+        "layers": 0,
+        "optim": "Adam",
+        "architecture": "dense",
+        "dataset": "smooth_poisson_100by100",
+        "epochs": 20,
+        "activation": "linear"
+        }
+    )
+
+
+    epochs = 20
+    for t in range(epochs):
+        print(f"Epoch {t+1}\n-------------------------------")
+        train(training_loader, linconv, loss_fn, optimizer)
+        test(validation_loader, linconv, loss_fn)
+        
+    print("Done!")
+
+    torch.save(linconv.state_dict(), "/Users/GUSTO/environments/firedrake/src/gusto/learning/linconv_poisson.pth")
+    print("Saved PyTorch Model State to linconv_poisson.pth")
+
+    wandb.finish()
+
+
+    
     # train dense network
-    optimizer = torch.optim.SGD(dense.parameters(), lr=6e-2, momentum=0.9)
+    optimizer = torch.optim.Adam(dense.parameters(), lr=1e-3)
     matrix = (2*np.eye(100) - np.eye(100, k=-1) - np.eye(100, k=1))*100**2
-    loss_fn = MSEplusOpLoss(matrix)
+    loss_fn = torch.nn.MSELoss()
+    #loss_fn = MSEplusOpLoss(matrix)
 
 
     # start a new wandb run to track this script
     wandb.init(
         # set the wandb project where this run will be logged
         project="ML_acc_solvers",
-        name= "dense_sm_MSE_self-poisson_100by100",
+        name= "scaleinf_dense_sm_poisson_100by100",
         
         # track hyperparameters and run metadata
         config={
-        "learning_rate": 6e-2,
+        "learning_rate": 1e-3,
         "layers": 2,
-        "optim": "SGD",
+        "optim": "Adam",
         "architecture": "dense",
         "dataset": "smoothpoisson_100by100",
-        "epochs": 10,
+        "epochs": 20,
         "activation": "ELU",
         "loss": "MSEplusOpLoss"
         }
     )
 
 
-    epochs = 10
+    epochs = 20
     for t in range(epochs):
         print(f"Epoch {t+1}\n-------------------------------")
         train(training_loader, dense, loss_fn, optimizer)
@@ -377,10 +440,12 @@ def poissontrain():
     print("Saved PyTorch Model State to poisson.pth")
 
     wandb.finish()
+
     
-    '''
+    
+    
     # train U-Net
-    optimizer = torch.optim.SGD(UNet.parameters(), lr=0.06, momentum=0.9)
+    optimizer = torch.optim.Adam(UNet.parameters(), lr=1e-2)
     loss_fn = torch.nn.MSELoss()
 
     
@@ -388,13 +453,13 @@ def poissontrain():
     wandb.init(
         # set the wandb project where this run will be logged
         project="ML_acc_solvers",
-        name= "UNet-ResNet_sm-poisson_100by100",
+        name= "UNet-ResNet-scaleinf_sm-poisson_100by100",
         
         # track hyperparameters and run metadata
         config={
-        "learning_rate": 0.06,
+        "learning_rate": 5e-3,
         "layers": 19,
-        "optim": "SGD",
+        "optim": "Adam",
         "architecture": "Res-UNet",
         "dataset": "smoothpoisson_100by100",
         "epochs": 10,
@@ -414,26 +479,9 @@ def poissontrain():
     print("Saved PyTorch Model State to unet_poisson.pth")
 
     wandb.finish()
-    '''
-
+    
 
 def helmholtztrain():
-    from torch.utils.data import DataLoader, TensorDataset, random_split
-    import wandb
-    import numpy as np
-    import matplotlib.pyplot as plt
-
-    device = (
-        "cuda"
-        if torch.cuda.is_available()
-        else "mps"
-        if torch.backends.mps.is_available()
-        else "cpu"
-    )
-    print(f"Using {device} device")
-
-    dense = Dense().to(device)
-    
     #generate some training data (solving a 1D discrete inhomogeneous
     # Helmholtz-type linear system).
     #The equation we set up is of the form (\nabla^2 + 1)x = b
@@ -487,43 +535,6 @@ def helmholtztrain():
         }
     )
 
-
-    def train(dataloader, model, loss_fn, optimizer):
-        size = len(dataloader.dataset)
-        model.train()
-        for batch, (X, y) in enumerate(dataloader):
-            X, y = X.to(device), y.to(device)
-
-            # Compute prediction error
-            pred = model(X)
-            loss = loss_fn(pred, y)
-
-            # Backpropagation
-            loss.backward()
-            optimizer.step()
-            optimizer.zero_grad()
-
-            if batch % 100 == 0:
-                loss, current = loss.item(), (batch + 1) * len(X)
-                print(f"loss: {loss:>7f}  [{current:>5d}/{size:>5d}]")
-            
-            wandb.log({"Training Loss":loss})
-
-
-    def test(dataloader, model, loss_fn):
-        num_batches = len(dataloader)
-        model.eval()
-        test_loss = 0
-        with torch.no_grad():
-            for X, y in dataloader:
-                X, y = X.to(device), y.to(device)
-                pred = model(X)
-                test_loss += loss_fn(pred, y).item()
-        test_loss /= num_batches
-        print(f"Test Error: Avg loss: {test_loss:>8f} \n")
-        wandb.log({"Test Loss":test_loss})
-
-
     epochs = 10
     for t in range(epochs):
         print(f"Epoch {t+1}\n-------------------------------")
@@ -538,8 +549,195 @@ def helmholtztrain():
     wandb.finish()
 
 
+#use weights already trained to learn on new dataset
+def transferlearn(in_file, out_file):
+    ps = np.loadtxt(out_file, delimiter=',')
+    vs = np.loadtxt(in_file, delimiter=',')
+
+    # Convert data to PyTorch tensors
+    input_tensors = torch.tensor(vs, dtype=torch.float32)
+    output_tensors = torch.tensor(ps, dtype=torch.float32)
+
+    # Create a TensorDataset from input and output tensors
+    dataset = TensorDataset(input_tensors, output_tensors)
+
+    # Define the sizes for training and test sets
+    train_size = int(0.8 * len(dataset))  # 80% of the data for training
+    validation_size = len(dataset) - train_size  # Remaining 20% for testing
+
+    # Use random_split to create training and test sets
+    training_set, validation_set = random_split(dataset, [train_size, validation_size])
+
+    # Create data loaders for our datasets; shuffle for training, not for validation
+    training_loader = DataLoader(training_set, batch_size=100, shuffle=True)
+    validation_loader = DataLoader(validation_set, batch_size=100, shuffle=False)
+    
+    #train linear regression model (after loading old state dict)
+    linreg.load_state_dict(torch.load("/Users/GUSTO/environments/firedrake/src/gusto/learning/lin_poisson.pth"))
+    optimizer = torch.optim.Adam(linreg.parameters(), lr=1e-3)
+    loss_fn = torch.nn.MSELoss()
+
+    # start a new wandb run to track this script
+    wandb.init(
+        # set the wandb project where this run will be logged
+        project="ML_acc_solvers",
+        name= "linreg_trans-poisson_inf_100by100",
+        
+        # track hyperparameters and run metadata
+        config={
+        "learning_rate": 1e-3,
+        "layers": 0,
+        "optim": "Adam",
+        "architecture": "dense",
+        "dataset": "smooth_poisson_100by100",
+        "epochs": 15,
+        "activation": "linear"
+        }
+    )
+
+
+    epochs = 15
+    for t in range(epochs):
+        print(f"Epoch {t+1}\n-------------------------------")
+        train(training_loader, linreg, loss_fn, optimizer)
+        test(validation_loader, linreg, loss_fn)
+        
+    print("Done!")
+
+    torch.save(linreg.state_dict(), "/Users/GUSTO/environments/firedrake/src/gusto/learning/lin_poisson_trans.pth")
+    print("Saved PyTorch Model State to lin_poisson_trans.pth")
+
+    wandb.finish()
+    
+    
+    #train linear convolution model
+    linconv.load_state_dict(torch.load("/Users/GUSTO/environments/firedrake/src/gusto/learning/linconv_poisson.pth"))
+    optimizer = torch.optim.Adam(linconv.parameters(), lr=1e-3)
+    loss_fn = torch.nn.MSELoss()
+
+    # start a new wandb run to track this script
+    wandb.init(
+        # set the wandb project where this run will be logged
+        project="ML_acc_solvers",
+        name= "linconv_trans-poisson_inf_100by100",
+        
+        # track hyperparameters and run metadata
+        config={
+        "learning_rate": 1e-3,
+        "layers": 0,
+        "optim": "Adam",
+        "architecture": "dense",
+        "dataset": "smooth_poisson_100by100",
+        "epochs": 15,
+        "activation": "linear"
+        }
+    )
+
+
+    epochs = 15
+    for t in range(epochs):
+        print(f"Epoch {t+1}\n-------------------------------")
+        train(training_loader, linconv, loss_fn, optimizer)
+        test(validation_loader, linconv, loss_fn)
+        
+    print("Done!")
+
+    torch.save(linconv.state_dict(), "/Users/GUSTO/environments/firedrake/src/gusto/learning/linconv_poisson_trans.pth")
+    print("Saved PyTorch Model State to linconv_poisson_trans.pth")
+
+    wandb.finish()
+
+
+    
+    # train dense network
+    dense.load_state_dict(torch.load("/Users/GUSTO/environments/firedrake/src/gusto/learning/poisson.pth"))
+    optimizer = torch.optim.Adam(dense.parameters(), lr=1e-3)
+    matrix = (2*np.eye(100) - np.eye(100, k=-1) - np.eye(100, k=1))*100**2
+    loss_fn = torch.nn.MSELoss()
+    #loss_fn = MSEplusOpLoss(matrix)
+
+
+    # start a new wandb run to track this script
+    wandb.init(
+        # set the wandb project where this run will be logged
+        project="ML_acc_solvers",
+        name= "scaleinf_dense_trans_poisson_100by100",
+        
+        # track hyperparameters and run metadata
+        config={
+        "learning_rate": 1e-3,
+        "layers": 2,
+        "optim": "Adam",
+        "architecture": "dense",
+        "dataset": "smoothpoisson_100by100",
+        "epochs": 15,
+        "activation": "ELU",
+        "loss": "MSEplusOpLoss"
+        }
+    )
+
+
+    epochs = 15
+    for t in range(epochs):
+        print(f"Epoch {t+1}\n-------------------------------")
+        train(training_loader, dense, loss_fn, optimizer)
+        test(validation_loader, dense, loss_fn)
+        
+    print("Done!")
+
+    torch.save(dense.state_dict(), "/Users/GUSTO/environments/firedrake/src/gusto/learning/poisson_trans.pth")
+    print("Saved PyTorch Model State to poisson_trans.pth")
+
+    wandb.finish()
+
+    
+    
+    
+    # train U-Net
+    UNet.load_state_dict(torch.load("/Users/GUSTO/environments/firedrake/src/gusto/learning/unet_poisson.pth"))
+    optimizer = torch.optim.Adam(UNet.parameters(), lr=1e-3)
+    loss_fn = torch.nn.MSELoss()
+
+    
+    # start a new wandb run to track this script
+    wandb.init(
+        # set the wandb project where this run will be logged
+        project="ML_acc_solvers",
+        name= "UNet-ResNet-scaleinf_trans-poisson_100by100",
+        
+        # track hyperparameters and run metadata
+        config={
+        "learning_rate": 5e-3,
+        "layers": 19,
+        "optim": "Adam",
+        "architecture": "Res-UNet",
+        "dataset": "smoothpoisson_100by100",
+        "epochs": 30,
+        }
+    )
+    
+    epochs = 30
+    for t in range(epochs):
+        print(f"Epoch {t+1}\n-------------------------------")
+    
+        train(training_loader, UNet, loss_fn, optimizer)
+        test(validation_loader, UNet, loss_fn)
+        
+    print("Done!")
+
+    torch.save(UNet.state_dict(), "/Users/GUSTO/environments/firedrake/src/gusto/learning/unet_poisson_trans.pth")
+    print("Saved PyTorch Model State to unet_poisson_trans.pth")
+
+    wandb.finish()
+
+
+
 #avoid running the rest of the script when just importing ML model from elsewhere
 if __name__ == '__main__':
+    datadir = '/Users/GUSTO/data/training/'
+    in_file = datadir + '/vs.csv'
+    out_file = datadir + '/ps.csv'
     poissontrain()
     #helmholtztrain()
+    transferlearn(in_file, out_file)
     
